@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "303101265658",
+    "firebase_url": "https://vyraal-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "vyraal",
+    "storage_bucket": "vyraal.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:303101265658:android:442bd17f98f4ba0559eb43",
+        "android_client_info": {
+          "package_name": "com.koadly.vyraal"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "303101265658-slb2s44hk1chc4jo7f2sb30rudbtas3g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.koadly.vyraal",
+            "certificate_hash": "2cd52f27520d7f77ed1b9283dfa82023bd4a8323"
+          }
+        },
+        {
+          "client_id": "303101265658-0nsko3at5g2irfsac960s5jr6q1e5rbc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGQz9nxI0cg7inDivRtqaP-z5w8ekl2pI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "303101265658-0nsko3at5g2irfsac960s5jr6q1e5rbc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
