@@ -12,6 +12,7 @@ class RiderDeliveryRepository {
   RiderDeliveryRepository({FirebaseDatabase? database}) : _database = database;
 
   final FirebaseDatabase? _database;
+  final Map<String, Map<String, String?>> _sellerImageCache = {};
 
   bool get isFirebaseReady {
     try {
@@ -30,7 +31,7 @@ class RiderDeliveryRepository {
         .orderByChild('requestStatus')
         .equalTo('available')
         .onValue
-        .map((event) => _ordersFromSnapshot(event.snapshot));
+        .asyncMap((event) => _ordersFromSnapshot(event.snapshot));
   }
 
   Future<bool> acceptOrder(RiderOrderModel order) async {
@@ -42,8 +43,21 @@ class RiderDeliveryRepository {
       return false;
     }
     final riderId = _riderId;
-    final riderName = _riderName;
-    final riderPhone = _riderPhone;
+    final riderProfile = await _currentRiderProfile();
+    final riderName = _profileText(riderProfile, const [
+      'name',
+      'fullName',
+    ], _riderName);
+    final riderPhone = _profileText(riderProfile, const [
+      'phone',
+      'phoneNumber',
+    ], _riderPhone);
+    final riderPhoto = _profileText(riderProfile, const [
+      'profilePhotoUrl',
+      'profilePhotoBase64',
+      'avatarUrl',
+      'photoUrl',
+    ], '');
     final acceptedAt = ServerValue.timestamp;
     final requestRef = database.ref('deliveryRequests/$key');
     final result = await requestRef.runTransaction((currentValue) {
@@ -59,6 +73,7 @@ class RiderDeliveryRepository {
         'assignedRiderId': riderId,
         'assignedRiderName': riderName,
         'assignedRiderPhone': riderPhone,
+        'assignedRiderPhotoUrl': riderPhoto,
         'acceptedAt': acceptedAt,
         'updatedAt': acceptedAt,
         'timeline': {
@@ -78,6 +93,7 @@ class RiderDeliveryRepository {
       'orders/$key/assignedRiderId': riderId,
       'orders/$key/assignedRiderName': riderName,
       'orders/$key/assignedRiderPhone': riderPhone,
+      'orders/$key/assignedRiderPhotoUrl': riderPhoto,
       'orders/$key/timeline/riderAcceptedAt': ServerValue.timestamp,
       'orders/$key/updatedAt': ServerValue.timestamp,
       'activeDeliveries/$key/requestStatus': 'accepted',
@@ -85,14 +101,21 @@ class RiderDeliveryRepository {
       'activeDeliveries/$key/assignedRiderId': riderId,
       'activeDeliveries/$key/assignedRiderName': riderName,
       'activeDeliveries/$key/assignedRiderPhone': riderPhone,
+      'activeDeliveries/$key/assignedRiderPhotoUrl': riderPhoto,
       'activeDeliveries/$key/updatedAt': ServerValue.timestamp,
       'orderTracking/$key/requestStatus': 'accepted',
       'orderTracking/$key/deliveryStage': 'riderAssigned',
       'orderTracking/$key/assignedRiderId': riderId,
+      'orderTracking/$key/assignedRiderName': riderName,
+      'orderTracking/$key/assignedRiderPhone': riderPhone,
+      'orderTracking/$key/assignedRiderPhotoUrl': riderPhoto,
       'orderTracking/$key/updatedAt': ServerValue.timestamp,
       'deliveryTracking/$key/requestStatus': 'accepted',
       'deliveryTracking/$key/deliveryStage': 'riderAssigned',
       'deliveryTracking/$key/assignedRiderId': riderId,
+      'deliveryTracking/$key/assignedRiderName': riderName,
+      'deliveryTracking/$key/assignedRiderPhone': riderPhone,
+      'deliveryTracking/$key/assignedRiderPhotoUrl': riderPhoto,
       'deliveryTracking/$key/updatedAt': ServerValue.timestamp,
       'users/riders/$riderId/activeOrders/$key': {
         'orderId': key,
@@ -124,6 +147,7 @@ class RiderDeliveryRepository {
         'users/sellers/$sellerId/orders/$key/assignedRiderId': riderId,
         'users/sellers/$sellerId/orders/$key/assignedRiderName': riderName,
         'users/sellers/$sellerId/orders/$key/assignedRiderPhone': riderPhone,
+        'users/sellers/$sellerId/orders/$key/assignedRiderPhotoUrl': riderPhoto,
         'users/sellers/$sellerId/orders/$key/timeline/riderAcceptedAt':
             ServerValue.timestamp,
         'users/sellers/$sellerId/orders/$key/updatedAt': ServerValue.timestamp,
@@ -138,6 +162,8 @@ class RiderDeliveryRepository {
         'users/customers/$customerId/orders/$key/assignedRiderName': riderName,
         'users/customers/$customerId/orders/$key/assignedRiderPhone':
             riderPhone,
+        'users/customers/$customerId/orders/$key/assignedRiderPhotoUrl':
+            riderPhoto,
         'users/customers/$customerId/orders/$key/timeline/riderAcceptedAt':
             ServerValue.timestamp,
         'users/customers/$customerId/orders/$key/updatedAt':
@@ -182,27 +208,49 @@ class RiderDeliveryRepository {
     );
   }
 
-  Future<void> uploadDeliveryProof(RiderOrderModel order) async {
+  Future<void> uploadDeliveryProof(
+    RiderOrderModel order, {
+    String? proofImageBase64,
+    String? proofImageUrl,
+  }) async {
     final database = _database ?? _maybeDatabase();
     if (database == null) return;
     final key = order.orderKey ?? _firebaseKey(order.id);
     final now = ServerValue.timestamp;
     final sellerId = order.sellerId;
     final customerId = order.customerId;
+    final proof = proofImageBase64?.trim();
+    final proofUrl = proofImageUrl?.trim();
     final updates = <String, Object?>{
       'deliveryRequests/$key/deliveryProofUploaded': true,
       'deliveryRequests/$key/deliveryProofUploadedAt': now,
+      'deliveryRequests/$key/deliveryProofImageBase64': proof,
+      'deliveryRequests/$key/deliveryProofImageUrl': proofUrl,
       'deliveryRequests/$key/updatedAt': now,
       'deliveryRequests/$key/timeline/deliveryProofUploadedAt': now,
       'orders/$key/deliveryProofUploaded': true,
       'orders/$key/deliveryProofUploadedAt': now,
+      'orders/$key/deliveryProofImageBase64': proof,
+      'orders/$key/deliveryProofImageUrl': proofUrl,
       'orders/$key/updatedAt': now,
       'orders/$key/timeline/deliveryProofUploadedAt': now,
+      'orderTracking/$key/deliveryProofUploaded': true,
+      'orderTracking/$key/deliveryProofUploadedAt': now,
+      'orderTracking/$key/deliveryProofImageBase64': proof,
+      'orderTracking/$key/deliveryProofImageUrl': proofUrl,
+      'orderTracking/$key/updatedAt': now,
+      'deliveryTracking/$key/deliveryProofUploaded': true,
+      'deliveryTracking/$key/deliveryProofUploadedAt': now,
+      'deliveryTracking/$key/deliveryProofImageBase64': proof,
+      'deliveryTracking/$key/deliveryProofImageUrl': proofUrl,
+      'deliveryTracking/$key/updatedAt': now,
     };
     if (sellerId != null && sellerId.isNotEmpty) {
       updates.addAll({
         'users/sellers/$sellerId/orders/$key/deliveryProofUploaded': true,
         'users/sellers/$sellerId/orders/$key/deliveryProofUploadedAt': now,
+        'users/sellers/$sellerId/orders/$key/deliveryProofImageBase64': proof,
+        'users/sellers/$sellerId/orders/$key/deliveryProofImageUrl': proofUrl,
         'users/sellers/$sellerId/orders/$key/updatedAt': now,
         'users/sellers/$sellerId/orders/$key/timeline/deliveryProofUploadedAt':
             now,
@@ -212,6 +260,10 @@ class RiderDeliveryRepository {
       updates.addAll({
         'users/customers/$customerId/orders/$key/deliveryProofUploaded': true,
         'users/customers/$customerId/orders/$key/deliveryProofUploadedAt': now,
+        'users/customers/$customerId/orders/$key/deliveryProofImageBase64':
+            proof,
+        'users/customers/$customerId/orders/$key/deliveryProofImageUrl':
+            proofUrl,
         'users/customers/$customerId/orders/$key/updatedAt': now,
         'users/customers/$customerId/orders/$key/timeline/deliveryProofUploadedAt':
             now,
@@ -259,7 +311,9 @@ class RiderDeliveryRepository {
     }
   }
 
-  List<RiderOrderModel> _ordersFromSnapshot(DataSnapshot snapshot) {
+  Future<List<RiderOrderModel>> _ordersFromSnapshot(
+    DataSnapshot snapshot,
+  ) async {
     final value = snapshot.value;
     if (value is! Map) return const [];
     final orders = <RiderOrderModel>[];
@@ -267,8 +321,9 @@ class RiderDeliveryRepository {
       final raw = entry.value;
       if (raw is! Map) continue;
       final data = Map<String, dynamic>.from(raw);
-      final order = _orderFromJson(data, entry.key.toString());
+      var order = _orderFromJson(data, entry.key.toString());
       if (_hasDeclined(data)) continue;
+      order = await _withStableSellerImage(order);
       orders.add(order);
     }
     orders.sort((a, b) => b.id.compareTo(a.id));
@@ -276,6 +331,82 @@ class RiderDeliveryRepository {
       orders[0] = orders[0].copyWith(isHighlighted: true);
     }
     return orders;
+  }
+
+  Future<RiderOrderModel> _withStableSellerImage(RiderOrderModel order) async {
+    final sellerId = order.sellerId?.trim();
+    final currentUrl = order.shopImageUrl?.trim();
+    final currentBase64 = order.shopImageBase64?.trim();
+    final hasImage =
+        (currentUrl != null && currentUrl.isNotEmpty) ||
+        (currentBase64 != null && currentBase64.isNotEmpty);
+
+    if (sellerId != null && sellerId.isNotEmpty && hasImage) {
+      _sellerImageCache[sellerId] = {
+        'url': currentUrl,
+        'base64': currentBase64,
+      };
+      return order;
+    }
+
+    if (sellerId == null || sellerId.isEmpty) return order;
+    final cached = _sellerImageCache[sellerId];
+    if (cached != null) {
+      return order.copyWith(
+        shopImageUrl: cached['url'],
+        shopImageBase64: cached['base64'],
+      );
+    }
+
+    final fetched = await _fetchSellerImage(sellerId);
+    if (fetched == null) return order;
+    _sellerImageCache[sellerId] = fetched;
+    return order.copyWith(
+      shopImageUrl: fetched['url'],
+      shopImageBase64: fetched['base64'],
+    );
+  }
+
+  Future<Map<String, String?>?> _fetchSellerImage(String sellerId) async {
+    final database = _database ?? _maybeDatabase();
+    if (database == null) return null;
+    for (final path in [
+      'publicSellers/$sellerId',
+      'sellerShopLocations/$sellerId',
+      'shopLocations/$sellerId',
+      'users/sellers/$sellerId/storeProfile',
+      'users/sellers/$sellerId',
+    ]) {
+      try {
+        final snap = await database
+            .ref(path)
+            .get()
+            .timeout(const Duration(milliseconds: 1200));
+        final value = snap.value;
+        if (value is! Map) continue;
+        final data = Map<String, dynamic>.from(value);
+        final url = _firstText(data, const [
+          'shopImageUrl',
+          'sellerImageUrl',
+          'profileImageUrl',
+          'imageUrl',
+          'image',
+          'shopImageBase64',
+          'imageBase64',
+        ]);
+        final base64 = _firstText(data, const [
+          'shopImageBase64',
+          'imageBase64',
+          'sellerImageBase64',
+          'shopImageUrl',
+          'image',
+        ]);
+        if ((url?.isNotEmpty ?? false) || (base64?.isNotEmpty ?? false)) {
+          return {'url': url, 'base64': base64};
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   RiderOrderModel _orderFromJson(Map<String, dynamic> json, String key) {
@@ -314,11 +445,26 @@ class RiderDeliveryRepository {
       itemCount: itemCount,
       customerArea: _shortArea(json['deliveryAddress'] as String?),
       shopImageAsset: 'assets/images/shop1.png',
-      shopImageUrl:
-          json['sellerImageUrl'] as String? ??
-          json['shopImageUrl'] as String? ??
-          json['profileImageUrl'] as String?,
-      shopImageBase64: json['shopImageBase64'] as String?,
+      shopImageUrl: _firstText(json, const [
+        'sellerImageUrl',
+        'shopImageUrl',
+        'profileImageUrl',
+        'sellerPhotoUrl',
+        'shopPhotoUrl',
+        'imageUrl',
+        'image',
+        'shopImageBase64',
+        'imageBase64',
+        'sellerImageBase64',
+      ]),
+      shopImageBase64: _firstText(json, const [
+        'shopImageBase64',
+        'imageBase64',
+        'sellerImageBase64',
+        'shopImageUrl',
+        'sellerImageUrl',
+        'image',
+      ]),
       sellerLat: (json['sellerLat'] as num?)?.toDouble(),
       sellerLng: (json['sellerLng'] as num?)?.toDouble(),
       deliveryLat: (json['deliveryLat'] as num?)?.toDouble(),
@@ -394,7 +540,10 @@ class RiderDeliveryRepository {
     }
     if (deliveryStage == 'delivered') {
       final riderId = _riderId;
-      final earningText = order.estimatedEarning.replaceAll(RegExp(r'[^0-9.]'), '');
+      final earningText = order.estimatedEarning.replaceAll(
+        RegExp(r'[^0-9.]'),
+        '',
+      );
       final earning = double.tryParse(earningText) ?? 0;
       updates.addAll({
         'users/riders/$riderId/activeOrders/$key': null,
@@ -443,14 +592,54 @@ class RiderDeliveryRepository {
     final database = _database ?? _maybeDatabase();
     if (database == null) return false;
     try {
-      final snap = await database.ref('users/riders/$_riderId').get().timeout(const Duration(seconds: 3));
+      final snap = await database
+          .ref('users/riders/$_riderId')
+          .get()
+          .timeout(const Duration(seconds: 3));
       final value = snap.value;
       if (value is! Map) return false;
       final data = Map<String, dynamic>.from(value);
-      return data['isVerified'] == true || data['verificationStatus'] == 'approved';
+      return data['isVerified'] == true ||
+          data['verificationStatus'] == 'approved';
     } catch (_) {
       return false;
     }
+  }
+
+  Future<Map<String, dynamic>> _currentRiderProfile() async {
+    final database = _database ?? _maybeDatabase();
+    if (database == null) return const {};
+    try {
+      final snap = await database
+          .ref('users/riders/$_riderId')
+          .get()
+          .timeout(const Duration(seconds: 3));
+      final value = snap.value;
+      if (value is! Map) return const {};
+      return Map<String, dynamic>.from(value);
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  String _profileText(
+    Map<String, dynamic> profile,
+    List<String> keys,
+    String fallback,
+  ) {
+    for (final key in keys) {
+      final text = profile[key]?.toString().trim() ?? '';
+      if (text.isNotEmpty && text != 'null') return text;
+    }
+    return fallback;
+  }
+
+  String? _firstText(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final text = json[key]?.toString().trim() ?? '';
+      if (text.isNotEmpty && text != 'null') return text;
+    }
+    return null;
   }
 
   bool _hasDeclined(Map<String, dynamic> json) {

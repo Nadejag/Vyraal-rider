@@ -8,8 +8,10 @@ import 'features/home/views/home_view.dart';
 import 'features/login/views/login_view.dart';
 import 'features/navigation/views/delivery_navigation_view.dart';
 import 'features/navigation/views/pickup_navigation_view.dart';
+import 'features/profile/views/profile_view.dart';
 import 'features/verification/views/verification_view.dart';
 import 'features/withdraw/views/withdraw_view.dart';
+import 'history/views/history_view.dart';
 
 class VyraalRiderApp extends StatefulWidget {
   const VyraalRiderApp({super.key});
@@ -29,12 +31,11 @@ class _VyraalRiderAppState extends State<VyraalRiderApp> {
 
   Future<String> _determineInitialRoute() async {
     try {
-      // Check if user has saved session
       final authService = RiderAuthService();
-      final savedUser = await authService.getSavedUser();
+      final savedUser = await authService.restoreSavedSession();
       
       if (savedUser != null) {
-        return AppRoutes.home; // User is already logged in
+        return AppRoutes.home;
       }
 
       // Check Firebase auth state
@@ -55,9 +56,20 @@ class _VyraalRiderAppState extends State<VyraalRiderApp> {
     return FutureBuilder<String>(
       future: _initialRouteFuture,
       builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return MaterialApp(
+            title: 'Vyraal Rider',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            home: const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            ),
+          );
+        }
         final initialRoute = snapshot.data ?? AppRoutes.login;
 
         return MaterialApp(
+          key: ValueKey(initialRoute),
           title: 'Vyraal Rider',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.light,
@@ -66,6 +78,8 @@ class _VyraalRiderAppState extends State<VyraalRiderApp> {
             AppRoutes.login: (_) => const LoginView(),
             AppRoutes.verification: (_) => const VerificationView(),
             AppRoutes.home: (_) => const HomeView(),
+            AppRoutes.profile: (_) => const ProfileView(),
+            AppRoutes.history: (_) => const HistoryView(),
             AppRoutes.withdraw: (_) => const WithdrawView(),
             AppRoutes.pickupNavigation: (_) => const PickupNavigationView(),
             AppRoutes.deliveryNavigation: (_) => const DeliveryNavigationView(),

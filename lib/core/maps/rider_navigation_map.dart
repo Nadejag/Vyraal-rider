@@ -1,9 +1,8 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../widgets/rider_image.dart';
 import 'rider_map_models.dart';
 
 class RiderNavigationMap extends StatefulWidget {
@@ -499,28 +498,11 @@ class _SellerMarker extends StatelessWidget {
   }
 
   Widget _sellerImage() {
-    final base64 = imageBase64?.trim();
-    if (base64 != null && base64.isNotEmpty) {
-      try {
-        return Image.memory(
-          base64Decode(base64),
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _fallback(),
-        );
-      } catch (_) {
-        return _fallback();
-      }
-    }
-
-    final url = imageUrl?.trim();
-    if (url != null && url.isNotEmpty && url.startsWith('http')) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _fallback(),
-      );
-    }
-    return _fallback();
+    return RiderImage(
+      url: imageUrl,
+      base64: imageBase64 ?? imageUrl,
+      fallback: _fallback(),
+    );
   }
 
   Widget _fallback() {

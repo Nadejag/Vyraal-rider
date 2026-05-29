@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../config/routes/app_routes.dart';
 import '../../../shared/widgets/ui_polish.dart';
 import '../models/withdraw_model.dart';
 import '../view_models/withdraw_view_model.dart';
@@ -62,7 +61,6 @@ class WithdrawView extends StatelessWidget {
                       },
                     ),
                   ),
-                  const _WithdrawBottomNav(),
                 ],
               ),
             ),
@@ -1139,65 +1137,6 @@ class _HistoryTile extends StatelessWidget {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WithdrawBottomNav extends StatelessWidget {
-  const _WithdrawBottomNav();
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      (Icons.local_shipping_outlined, 'Orders', AppRoutes.home),
-      (Icons.payments_outlined, 'Earnings', AppRoutes.home),
-      (Icons.history_rounded, 'History', AppRoutes.home),
-      (Icons.person_outline_rounded, 'Profile', AppRoutes.home),
-    ];
-
-    return Container(
-      height: 66,
-      decoration: const BoxDecoration(
-        color: WithdrawView._backgroundColor,
-        border: Border(top: BorderSide(color: WithdrawView._borderGoldColor)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          for (var index = 0; index < items.length; index++)
-            Expanded(
-              child: InkWell(
-                onTap: () => Navigator.of(context).pushNamedAndRemoveUntil(items[index].$3, (route) => false),
-                borderRadius: BorderRadius.circular(10),
-                child: Center(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          items[index].$1,
-                          color: index == 1 ? WithdrawView._darkGoldColor : WithdrawView._mutedColor,
-                          size: 21,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          items[index].$2,
-                          style: TextStyle(
-                            color: index == 1 ? WithdrawView._darkGoldColor : WithdrawView._mutedColor,
-                            fontSize: 11,
-                            height: 1,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );

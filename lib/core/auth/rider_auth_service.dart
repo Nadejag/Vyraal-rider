@@ -27,7 +27,9 @@ class RiderAuthService {
   /// Restores the saved rider session. This is the one-time auth entry point:
   /// if FirebaseAuth still has a user or SharedPreferences has a rider profile,
   /// the rider stays logged in until logout() is called.
-  Future<RiderUserModel?> restoreSavedSession({bool refreshRemote = true}) async {
+  Future<RiderUserModel?> restoreSavedSession({
+    bool refreshRemote = true,
+  }) async {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     final local = await getSavedUser();
     final uid = firebaseUser?.uid ?? local?.id;
@@ -47,11 +49,13 @@ class RiderAuthService {
     return createOrFetchUser(phone, uid: uid);
   }
 
-  Future<bool> hasActiveSession() async => (await restoreSavedSession(refreshRemote: false)) != null;
+  Future<bool> hasActiveSession() async =>
+      (await restoreSavedSession(refreshRemote: false)) != null;
 
   Future<RiderUserModel> createOrFetchUser(String phone, {String? uid}) async {
     final firebaseUid = FirebaseAuth.instance.currentUser?.uid;
-    final effectiveUid = (uid?.trim().isNotEmpty == true ? uid!.trim() : firebaseUid) ??
+    final effectiveUid =
+        (uid?.trim().isNotEmpty == true ? uid!.trim() : firebaseUid) ??
         'rider_${DateTime.now().millisecondsSinceEpoch}';
 
     final raw = (await SharedPreferences.getInstance()).getString(_userKey);
@@ -121,17 +125,21 @@ class RiderAuthService {
   Stream<RiderUserModel?> watchUser(String? uid) {
     if (uid == null || uid.isEmpty) return const Stream.empty();
 
-    return vyraalDatabase.ref('users/riders/$uid').onValue.map<RiderUserModel?>(
-      (event) {
-        final value = event.snapshot.value;
-        if (value is! Map) return null;
-        final rider = RiderUserModel.fromJson(Map<String, dynamic>.from(value));
-        unawaited(_saveLocalOnly(rider));
-        return rider;
-      },
-    ).handleError((Object error, StackTrace stackTrace) {
-      debugPrint('Rider profile watch skipped: $error');
-    });
+    return vyraalDatabase
+        .ref('users/riders/$uid')
+        .onValue
+        .map<RiderUserModel?>((event) {
+          final value = event.snapshot.value;
+          if (value is! Map) return null;
+          final rider = RiderUserModel.fromJson(
+            Map<String, dynamic>.from(value),
+          );
+          unawaited(_saveLocalOnly(rider));
+          return rider;
+        })
+        .handleError((Object error, StackTrace stackTrace) {
+          debugPrint('Rider profile watch skipped: $error');
+        });
   }
 
   Future<void> saveProfileSetup({
@@ -220,7 +228,6 @@ class RiderAuthService {
       'licenseFrontBase64': licenseFrontUrl.trim(),
       'vehiclePhotoBase64': vehiclePhotoUrl.trim(),
       'profilePhotoBase64': profilePhotoUrl.trim(),
-      'profilePhotoBase64': profilePhotoUrl.trim(),
       'status': 'pending',
       'verificationStatus': 'pending',
       'documentStatus': 'pending',
@@ -231,64 +238,245 @@ class RiderAuthService {
       'updatedAt': ServerValue.timestamp,
     };
 
-    await vyraalDatabase.ref().update({
-      'riderVerifications/$riderId': request,
-      'riderDocuments/$riderId': request,
-      'riderVerificationDocuments/$riderId': request,
-      'admin/riderVerifications/$riderId': request,
-      'admin/riderDocuments/$riderId': request,
-      'users/riders/$riderId/verificationStatus': 'pending',
-      'users/riders/$riderId/documentStatus': 'pending',
-      'users/riders/$riderId/isVerified': false,
-      'users/riders/$riderId/canReceiveOrders': false,
-      'users/riders/$riderId/workStatus': 'offline',
-      'users/riders/$riderId/profilePhotoUrl': profilePhotoUrl.trim(),
-      'users/riders/$riderId/profilePhotoBase64': profilePhotoUrl.trim(),
-      'users/riders/$riderId/updatedAt': ServerValue.timestamp,
-      'riders/$riderId/verificationStatus': 'pending',
-      'riders/$riderId/documentStatus': 'pending',
-      'riders/$riderId/isVerified': false,
-      'riders/$riderId/canReceiveOrders': false,
-      'riders/$riderId/workStatus': 'offline',
-      'riders/$riderId/profilePhotoUrl': profilePhotoUrl.trim(),
-      'riders/$riderId/profilePhotoBase64': profilePhotoUrl.trim(),
-      'riders/$riderId/updatedAt': ServerValue.timestamp,
-    }).timeout(const Duration(seconds: 8));
+    await vyraalDatabase
+        .ref()
+        .update({
+          'riderVerifications/$riderId': request,
+          'riderDocuments/$riderId': request,
+          'riderVerificationDocuments/$riderId': request,
+          'admin/riderVerifications/$riderId': request,
+          'admin/riderDocuments/$riderId': request,
+          'users/riders/$riderId/verificationStatus': 'pending',
+          'users/riders/$riderId/documentStatus': 'pending',
+          'users/riders/$riderId/isVerified': false,
+          'users/riders/$riderId/canReceiveOrders': false,
+          'users/riders/$riderId/workStatus': 'offline',
+          'users/riders/$riderId/profilePhotoUrl': profilePhotoUrl.trim(),
+          'users/riders/$riderId/profilePhotoBase64': profilePhotoUrl.trim(),
+          'users/riders/$riderId/updatedAt': ServerValue.timestamp,
+          'riders/$riderId/verificationStatus': 'pending',
+          'riders/$riderId/documentStatus': 'pending',
+          'riders/$riderId/isVerified': false,
+          'riders/$riderId/canReceiveOrders': false,
+          'riders/$riderId/workStatus': 'offline',
+          'riders/$riderId/profilePhotoUrl': profilePhotoUrl.trim(),
+          'riders/$riderId/profilePhotoBase64': profilePhotoUrl.trim(),
+          'riders/$riderId/updatedAt': ServerValue.timestamp,
+        })
+        .timeout(const Duration(seconds: 8));
   }
 
   Future<void> updateWorkStatus(String riderId, String status) async {
     final user = await _fetchRemoteUser(riderId);
-    final verified = user?.isVerified == true || user?.verificationStatus == 'approved';
+    final verified =
+        user?.isVerified == true || user?.verificationStatus == 'approved';
     final normalized = status == 'online' && verified ? 'online' : 'offline';
     final isOnline = normalized == 'online';
-    await vyraalDatabase.ref().update({
-      'users/riders/$riderId/workStatus': normalized,
-      'users/riders/$riderId/isOnline': isOnline,
-      'users/riders/$riderId/canReceiveOrders': verified,
-      'users/riders/$riderId/updatedAt': ServerValue.timestamp,
-      'riders/$riderId/workStatus': normalized,
-      'riders/$riderId/isOnline': isOnline,
-      'riders/$riderId/canReceiveOrders': verified,
-      'riders/$riderId/updatedAt': ServerValue.timestamp,
-      'riderWorkStatus/$riderId/workStatus': normalized,
-      'riderWorkStatus/$riderId/isOnline': isOnline,
-      'riderWorkStatus/$riderId/canReceiveOrders': verified,
-      'riderWorkStatus/$riderId/updatedAt': ServerValue.timestamp,
-      'riderLiveLocations/$riderId/isOnline': isOnline,
-      'riderLiveLocations/$riderId/workStatus': normalized,
-      'riderLiveLocations/$riderId/canReceiveOrders': verified,
-      'riderLiveLocations/$riderId/updatedAt': ServerValue.timestamp,
-      'liveRiderLocations/$riderId/isOnline': isOnline,
-      'liveRiderLocations/$riderId/workStatus': normalized,
-      'liveRiderLocations/$riderId/canReceiveOrders': verified,
-      'liveRiderLocations/$riderId/updatedAt': ServerValue.timestamp,
-    }).timeout(const Duration(seconds: 5));
+    await vyraalDatabase
+        .ref()
+        .update({
+          'users/riders/$riderId/workStatus': normalized,
+          'users/riders/$riderId/isOnline': isOnline,
+          'users/riders/$riderId/canReceiveOrders': verified,
+          'users/riders/$riderId/updatedAt': ServerValue.timestamp,
+          'riders/$riderId/workStatus': normalized,
+          'riders/$riderId/isOnline': isOnline,
+          'riders/$riderId/canReceiveOrders': verified,
+          'riders/$riderId/updatedAt': ServerValue.timestamp,
+          'riderWorkStatus/$riderId/workStatus': normalized,
+          'riderWorkStatus/$riderId/isOnline': isOnline,
+          'riderWorkStatus/$riderId/canReceiveOrders': verified,
+          'riderWorkStatus/$riderId/updatedAt': ServerValue.timestamp,
+          'riderLiveLocations/$riderId/isOnline': isOnline,
+          'riderLiveLocations/$riderId/workStatus': normalized,
+          'riderLiveLocations/$riderId/canReceiveOrders': verified,
+          'riderLiveLocations/$riderId/updatedAt': ServerValue.timestamp,
+          'liveRiderLocations/$riderId/isOnline': isOnline,
+          'liveRiderLocations/$riderId/workStatus': normalized,
+          'liveRiderLocations/$riderId/canReceiveOrders': verified,
+          'liveRiderLocations/$riderId/updatedAt': ServerValue.timestamp,
+        })
+        .timeout(const Duration(seconds: 5));
+  }
+
+  Future<void> updateNotificationEmail({
+    required String riderId,
+    required String email,
+    bool? emailNotificationsEnabled,
+  }) async {
+    final normalizedEmail = email.trim();
+    await vyraalDatabase
+        .ref()
+        .update({
+          'users/riders/$riderId/email': normalizedEmail,
+          'users/riders/$riderId/updatedAt': ServerValue.timestamp,
+          'riders/$riderId/email': normalizedEmail,
+          'riders/$riderId/updatedAt': ServerValue.timestamp,
+          'riderProfiles/$riderId/email': normalizedEmail,
+          'riderProfiles/$riderId/updatedAt': ServerValue.timestamp,
+          if (emailNotificationsEnabled != null) ...{
+            'users/riders/$riderId/emailNotificationsEnabled':
+                emailNotificationsEnabled,
+            'riders/$riderId/emailNotificationsEnabled':
+                emailNotificationsEnabled,
+            'riderProfiles/$riderId/emailNotificationsEnabled':
+                emailNotificationsEnabled,
+          },
+        })
+        .timeout(const Duration(seconds: 5));
+
+    final local = await getSavedUser();
+    if (local != null && local.id == riderId) {
+      await _saveLocalOnly(
+        local.copyWith(
+          email: normalizedEmail,
+          emailNotificationsEnabled:
+              emailNotificationsEnabled ?? local.emailNotificationsEnabled,
+        ),
+      );
+    }
+  }
+
+  Future<void> updateRiderProfile({
+    required String riderId,
+    String? name,
+    String? phone,
+    String? city,
+    String? address,
+    String? vehicleType,
+    String? vehicleNumber,
+    String? profilePhotoUrl,
+  }) async {
+    final updates = <String, dynamic>{
+      'updatedAt': ServerValue.timestamp,
+      'profileUpdatedAt': ServerValue.timestamp,
+    };
+
+    void put(String key, String? value) {
+      final text = value?.trim();
+      if (text != null && text.isNotEmpty) updates[key] = text;
+    }
+
+    put('name', name);
+    put('phone', phone);
+    put('city', city);
+    put('address', address);
+    put('vehicleType', vehicleType);
+    put('vehicleNumber', vehicleNumber);
+    put('profilePhotoUrl', profilePhotoUrl);
+    put('profilePhotoBase64', profilePhotoUrl);
+
+    final profileUpdates = <String, dynamic>{};
+    for (final entry in updates.entries) {
+      profileUpdates['users/riders/$riderId/${entry.key}'] = entry.value;
+      profileUpdates['riders/$riderId/${entry.key}'] = entry.value;
+      profileUpdates['riderProfiles/$riderId/${entry.key}'] = entry.value;
+    }
+    await vyraalDatabase
+        .ref()
+        .update(profileUpdates)
+        .timeout(const Duration(seconds: 5));
+
+    final riderName = (updates['name'] as String?)?.trim();
+    final riderPhone = (updates['phone'] as String?)?.trim();
+    final riderPhoto = (updates['profilePhotoUrl'] as String?)?.trim();
+    final orderUpdates = <String, dynamic>{};
+
+    void patchOrder(String key, {String? sellerId, String? customerId}) {
+      if (riderName != null && riderName.isNotEmpty) {
+        orderUpdates['orders/$key/assignedRiderName'] = riderName;
+        orderUpdates['activeDeliveries/$key/assignedRiderName'] = riderName;
+        orderUpdates['orderTracking/$key/assignedRiderName'] = riderName;
+        orderUpdates['deliveryTracking/$key/assignedRiderName'] = riderName;
+        if (sellerId != null && sellerId.isNotEmpty) {
+          orderUpdates['users/sellers/$sellerId/orders/$key/assignedRiderName'] =
+              riderName;
+        }
+        if (customerId != null && customerId.isNotEmpty) {
+          orderUpdates['users/customers/$customerId/orders/$key/assignedRiderName'] =
+              riderName;
+        }
+      }
+      if (riderPhone != null && riderPhone.isNotEmpty) {
+        orderUpdates['orders/$key/assignedRiderPhone'] = riderPhone;
+        orderUpdates['activeDeliveries/$key/assignedRiderPhone'] = riderPhone;
+        orderUpdates['orderTracking/$key/assignedRiderPhone'] = riderPhone;
+        orderUpdates['deliveryTracking/$key/assignedRiderPhone'] = riderPhone;
+        if (sellerId != null && sellerId.isNotEmpty) {
+          orderUpdates['users/sellers/$sellerId/orders/$key/assignedRiderPhone'] =
+              riderPhone;
+        }
+        if (customerId != null && customerId.isNotEmpty) {
+          orderUpdates['users/customers/$customerId/orders/$key/assignedRiderPhone'] =
+              riderPhone;
+        }
+      }
+      if (riderPhoto != null && riderPhoto.isNotEmpty) {
+        orderUpdates['orders/$key/assignedRiderPhotoUrl'] = riderPhoto;
+        orderUpdates['activeDeliveries/$key/assignedRiderPhotoUrl'] =
+            riderPhoto;
+        orderUpdates['orderTracking/$key/assignedRiderPhotoUrl'] = riderPhoto;
+        orderUpdates['deliveryTracking/$key/assignedRiderPhotoUrl'] =
+            riderPhoto;
+        if (sellerId != null && sellerId.isNotEmpty) {
+          orderUpdates['users/sellers/$sellerId/orders/$key/assignedRiderPhotoUrl'] =
+              riderPhoto;
+        }
+        if (customerId != null && customerId.isNotEmpty) {
+          orderUpdates['users/customers/$customerId/orders/$key/assignedRiderPhotoUrl'] =
+              riderPhoto;
+        }
+      }
+    }
+
+    final activeSnap = await vyraalDatabase
+        .ref('users/riders/$riderId/activeOrders')
+        .get()
+        .timeout(const Duration(seconds: 3));
+    final active = activeSnap.value;
+    if (active is Map) {
+      for (final entry in active.entries) {
+        final value = entry.value;
+        final meta = value is Map ? Map<String, dynamic>.from(value) : const {};
+        patchOrder(
+          entry.key.toString(),
+          sellerId: meta['sellerId']?.toString(),
+          customerId: meta['customerId']?.toString(),
+        );
+      }
+    }
+
+    if (orderUpdates.isNotEmpty) {
+      await vyraalDatabase
+          .ref()
+          .update(orderUpdates)
+          .timeout(const Duration(seconds: 5));
+    }
+
+    final local = await getSavedUser();
+    if (local != null && local.id == riderId) {
+      await _saveLocalOnly(
+        local.copyWith(
+          name: riderName ?? local.name,
+          phone: riderPhone ?? local.phone,
+          city: (updates['city'] as String?) ?? local.city,
+          address: (updates['address'] as String?) ?? local.address,
+          vehicleType: (updates['vehicleType'] as String?) ?? local.vehicleType,
+          vehicleNumber:
+              (updates['vehicleNumber'] as String?) ?? local.vehicleNumber,
+          profilePhotoUrl: riderPhoto ?? local.profilePhotoUrl,
+        ),
+      );
+    }
   }
 
   Future<RiderUserModel?> _fetchRemoteUser(String? uid) async {
     if (uid == null || uid.isEmpty) return null;
     try {
-      final snapshot = await vyraalDatabase.ref('users/riders/$uid').get().timeout(const Duration(milliseconds: 2200));
+      final snapshot = await vyraalDatabase
+          .ref('users/riders/$uid')
+          .get()
+          .timeout(const Duration(milliseconds: 2200));
       final value = snapshot.value;
       if (value is! Map) return null;
       return RiderUserModel.fromJson(Map<String, dynamic>.from(value));
@@ -308,7 +496,10 @@ class RiderAuthService {
       'updatedAt': ServerValue.timestamp,
     };
     try {
-      await _multiUpdateRider(user.id, data).timeout(const Duration(seconds: 4));
+      await _multiUpdateRider(
+        user.id,
+        data,
+      ).timeout(const Duration(seconds: 4));
     } catch (error) {
       debugPrint('Rider profile save skipped: $error');
     }

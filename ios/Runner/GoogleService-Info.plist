@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>303101265658-ia39cc1b7oo8ja49t8dci8lreat0gkud.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.303101265658-ia39cc1b7oo8ja49t8dci8lreat0gkud</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>303101265658-slb2s44hk1chc4jo7f2sb30rudbtas3g.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyA-GN3Nmleh7TftoG7L7fph9gDfaTJGgBA</string>
+	<key>GCM_SENDER_ID</key>
+	<string>303101265658</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.koadly.vyraal.Rider</string>
+	<key>PROJECT_ID</key>
+	<string>vyraal</string>
+	<key>STORAGE_BUCKET</key>
+	<string>vyraal.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:303101265658:ios:5c97d316df3133b059eb43</string>
+	<key>DATABASE_URL</key>
+	<string>https://vyraal-default-rtdb.asia-southeast1.firebasedatabase.app</string>
+</dict>
+</plist>

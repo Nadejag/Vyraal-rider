@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -8,6 +6,7 @@ import '../../../config/routes/app_routes.dart';
 import '../../../core/maps/rider_map_models.dart';
 import '../../../core/maps/rider_navigation_map.dart';
 import '../../../core/realtime/rider_order_chat_sheet.dart';
+import '../../../core/widgets/rider_image.dart';
 import '../../../shared/widgets/ui_polish.dart';
 import '../view_models/navigation_view_model.dart';
 
@@ -109,7 +108,11 @@ class _PickupHeader extends StatelessWidget {
                 colors: [Color(0xFFEFE7CE), Color(0xFF0F766E)],
               ),
             ),
-            child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 22),
+            child: const Icon(
+              Icons.storefront_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           const Expanded(
@@ -363,9 +366,9 @@ class _PickupSheet extends StatelessWidget {
                     ? null
                     : () {
                         viewModel.markPickedUp();
-                        Navigator.of(context).pushReplacementNamed(
-                          AppRoutes.deliveryNavigation,
-                        );
+                        Navigator.of(
+                          context,
+                        ).pushReplacementNamed(AppRoutes.deliveryNavigation);
                       },
                 style: FilledButton.styleFrom(
                   backgroundColor: PickupNavigationView._goldColor,
@@ -412,27 +415,11 @@ class _ShopAvatar extends StatelessWidget {
   }
 
   Widget _image() {
-    final base64 = imageBase64?.trim();
-    if (base64 != null && base64.isNotEmpty) {
-      try {
-        return Image.memory(
-          base64Decode(base64),
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _fallback(),
-        );
-      } catch (_) {
-        return _fallback();
-      }
-    }
-    final url = imageUrl?.trim();
-    if (url != null && url.startsWith('http')) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => _fallback(),
-      );
-    }
-    return _fallback();
+    return RiderImage(
+      url: imageUrl,
+      base64: imageBase64 ?? imageUrl,
+      fallback: _fallback(),
+    );
   }
 
   Widget _fallback() {

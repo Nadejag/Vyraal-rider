@@ -13,6 +13,8 @@ import '../../../core/maps/rider_location_service.dart';
 import '../../../core/realtime/rider_active_delivery_store.dart';
 import '../../../core/realtime/rider_delivery_repository.dart';
 import '../../../core/realtime/rider_realtime_service.dart';
+import '../../../core/realtime/rider_email_notification_service.dart';
+import '../../login/models/rider_user_model.dart';
 import '../models/home_model.dart';
 
 class HomeViewModel extends BaseViewModel {
@@ -29,6 +31,78 @@ class HomeViewModel extends BaseViewModel {
       _handleRealtimeEvent,
     );
     _startLocationTracking();
+
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    RiderEmailNotificationService.instance.bindRider(
+      firebaseUser?.uid,
+      email: firebaseUser?.email,
+      name: firebaseUser?.displayName,
+    );
+    _authService.getSavedUser().then((savedUser) {
+      if (savedUser != null) {
+        _sessionRiderId = savedUser.id;
+        RiderEmailNotificationService.instance.updateRiderProfile(
+          email: savedUser.email,
+          name: savedUser.name,
+        );
+        _model = _model.copyWith(
+          profile: _model.profile.copyWith(
+            emailNotificationsEnabled: savedUser.emailNotificationsEnabled,
+          ),
+        );
+        if (firebaseUser == null) _startRealtimeHistory();
+        if (firebaseUser == null && _userProfileSubscription == null) {
+          _userProfileSubscription = _authService.watchUser(savedUser.id).listen((user) {
+            if (user != null) {
+              _sessionRiderId = user.id;
+              _model = _model.copyWith(
+                profile: _model.profile.copyWith(
+                  fullName: user.name,
+                  phoneNumber: user.phone,
+                  cnic: user.cnicNumber,
+                  bikeRegistrationNumber: user.vehicleNumber,
+                  vehicleName: user.vehicleType,
+                  email: user.email ?? '',
+                  isOnline: user.isOnline,
+                  emailNotificationsEnabled: user.emailNotificationsEnabled,
+                  profilePhotoUrl: user.profilePhotoUrl.isEmpty
+                      ? null
+                      : user.profilePhotoUrl,
+                  verificationStatus: user.verificationStatus,
+                ),
+              );
+              notifyListeners();
+            }
+          });
+        }
+        notifyListeners();
+      }
+    });
+
+    final watchRiderId = firebaseUser?.uid ?? _sessionRiderId;
+    if (watchRiderId != null && watchRiderId.isNotEmpty) {
+      _userProfileSubscription = _authService.watchUser(watchRiderId).listen((user) {
+        if (user != null) {
+          _sessionRiderId = user.id;
+          _model = _model.copyWith(
+            profile: _model.profile.copyWith(
+              fullName: user.name,
+              phoneNumber: user.phone,
+              cnic: user.cnicNumber,
+              bikeRegistrationNumber: user.vehicleNumber,
+              vehicleName: user.vehicleType,
+              email: user.email ?? '',
+              isOnline: user.isOnline,
+              emailNotificationsEnabled: user.emailNotificationsEnabled,
+              profilePhotoUrl:
+                  user.profilePhotoUrl.isEmpty ? null : user.profilePhotoUrl,
+              verificationStatus: user.verificationStatus,
+            ),
+          );
+          notifyListeners();
+        }
+      });
+    }
 
     if (_deliveryRepository.isFirebaseReady) {
       _model = _model.copyWith(orders: const []);
@@ -66,10 +140,13 @@ class HomeViewModel extends BaseViewModel {
   StreamSubscription<DatabaseEvent>? _riderEarningsSubscription;
   StreamSubscription<DatabaseEvent>? _userEarningsSubscription;
   StreamSubscription<DatabaseEvent>? _riderStatsSubscription;
+  StreamSubscription<RiderUserModel?>? _userProfileSubscription;
 
   LatLng? _riderPosition;
   String? _activePopupNotificationId;
+  String? _sessionRiderId;
   bool _hasLoadedOrders = false;
+  bool _isChangingWorkStatus = false;
 
   HomeModel _model = const HomeModel(
     todayTrips: 0,
@@ -130,12 +207,41 @@ class HomeViewModel extends BaseViewModel {
     return null;
   }
 
-  bool get isChangingStatus => _model.profile.isBusy;
+  bool get isChangingStatus => _isChangingWorkStatus;
   bool get isLoading => !_hasLoadedOrders && _model.ordersError == null;
   bool get isOnline => _model.profile.isOnline;
   bool get isAcceptingOrder => false;
 
-  Future<void> refresh() async {}
+  Future<void> refresh() async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser != null) {
+      try {
+        final snap = await vyraalDatabase.ref('users/riders/${firebaseUser.uid}').get().timeout(const Duration(seconds: 4));
+        final value = snap.value;
+        if (value is Map) {
+          final user = RiderUserModel.fromJson(Map<String, dynamic>.from(value));
+          await _authService.saveUser(user);
+          _model = _model.copyWith(
+            profile: _model.profile.copyWith(
+              fullName: user.name,
+              phoneNumber: user.phone,
+              cnic: user.cnicNumber,
+              bikeRegistrationNumber: user.vehicleNumber,
+              vehicleName: user.vehicleType,
+              email: user.email ?? '',
+              isOnline: user.isOnline,
+              emailNotificationsEnabled: user.emailNotificationsEnabled,
+              profilePhotoUrl:
+                  user.profilePhotoUrl.isEmpty ? null : user.profilePhotoUrl,
+              verificationStatus: user.verificationStatus,
+            ),
+          );
+        }
+      } catch (_) {}
+    }
+    _rebuildHistory();
+    notifyListeners();
+  }
 
   void toggleWorkStatus(bool isOnline) => toggleOnlineStatus(isOnline);
 
@@ -426,11 +532,28 @@ class HomeViewModel extends BaseViewModel {
     notifyListeners();
   }
 
-  void toggleOnlineStatus(bool isOnline) {
-    _model = _model.copyWith(
-      profile: _model.profile.copyWith(isOnline: isOnline),
-    );
+  Future<void> toggleOnlineStatus(bool isOnline) async {
+    final previousProfile = _model.profile;
+    _isChangingWorkStatus = true;
+    _model = _model.copyWith(profile: _model.profile.copyWith(isOnline: isOnline));
     _realtimeService.riderStatusChanged(isOnline);
+    notifyListeners();
+
+    try {
+      final riderId = _riderId;
+      if (riderId.isNotEmpty && riderId != 'demo-rider') {
+        await _authService.updateWorkStatus(
+          riderId,
+          isOnline ? 'online' : 'offline',
+        );
+      }
+      _model = _model.copyWith(profile: _model.profile.copyWith(isOnline: isOnline));
+    } catch (error) {
+      _model = _model.copyWith(profile: previousProfile);
+      setError('Could not update realtime work status. Please try again.');
+    } finally {
+      _isChangingWorkStatus = false;
+    }
     notifyListeners();
   }
 
@@ -479,7 +602,74 @@ class HomeViewModel extends BaseViewModel {
       profile: _model.profile.copyWith(alertsEnabled: enabled),
     );
     _realtimeService.riderAlertsChanged(enabled);
+
+    final riderId = _riderId;
+    if (riderId.isNotEmpty && riderId != 'demo-rider') {
+      vyraalDatabase.ref('users/riders/$riderId/alertsEnabled').set(enabled);
+      vyraalDatabase.ref('riders/$riderId/alertsEnabled').set(enabled);
+    }
+
     notifyListeners();
+  }
+
+  void toggleEmailNotifications(bool enabled) {
+    if (_model.profile.emailNotificationsEnabled == enabled) return;
+
+    _model = _model.copyWith(
+      profile: _model.profile.copyWith(emailNotificationsEnabled: enabled),
+    );
+
+    final riderId = _riderId;
+    if (riderId.isNotEmpty && riderId != 'demo-rider') {
+      vyraalDatabase.ref('users/riders/$riderId/emailNotificationsEnabled').set(enabled);
+      vyraalDatabase.ref('riders/$riderId/emailNotificationsEnabled').set(enabled);
+    }
+
+    _authService.getSavedUser().then((savedUser) {
+      if (savedUser != null) {
+        final updatedUser = savedUser.copyWith(emailNotificationsEnabled: enabled);
+        _authService.saveUser(updatedUser);
+      }
+    });
+
+    notifyListeners();
+  }
+
+  Future<bool> updateEmail(String email) async {
+    final normalizedEmail = email.trim();
+    if (!_isValidEmail(normalizedEmail)) {
+      setError('Enter a valid notification email address.');
+      return false;
+    }
+    if (_model.profile.email == normalizedEmail) return true;
+
+    _model = _model.copyWith(
+      profile: _model.profile.copyWith(email: normalizedEmail),
+    );
+    RiderEmailNotificationService.instance.updateRiderProfile(
+      email: normalizedEmail,
+      name: _model.profile.fullName,
+    );
+    notifyListeners();
+
+    try {
+      final riderId = _riderId;
+      if (riderId.isNotEmpty && riderId != 'demo-rider') {
+        await _authService.updateNotificationEmail(
+          riderId: riderId,
+          email: normalizedEmail,
+          emailNotificationsEnabled: _model.profile.emailNotificationsEnabled,
+        );
+      }
+      return true;
+    } catch (error) {
+      setError('Could not save notification email. Please try again.');
+      return false;
+    }
+  }
+
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
   }
 
   void openHelpCenter() {
@@ -547,23 +737,27 @@ class HomeViewModel extends BaseViewModel {
   void _handleRealtimeEvent(RiderRealtimeEvent event) {
     switch (event.type) {
       case 'new_order_request_alert':
+        final orderId = event.payload['orderId']?.toString() ?? '';
+        final sellerName = event.payload['sellerName']?.toString() ?? 'Nearby shop';
         _addNotification(
           RiderNotificationModel(
-            id: '${event.type}-${event.payload['orderId']}-${DateTime.now().microsecondsSinceEpoch}',
+            id: '${event.type}-$orderId-${DateTime.now().microsecondsSinceEpoch}',
             type: RiderNotificationType.orderRequest,
             title: 'New order request',
             message:
-                '${event.payload['sellerName']} is nearby. Accept within 60 seconds.',
+                '$sellerName is nearby. Accept within 60 seconds.',
             timeLabel: 'Now',
             isUrgent: true,
             showPopup: true,
           ),
         );
+        unawaited(_sendNewOrderRequestEmail(orderId, sellerName));
         break;
       case 'order_accepted':
+        final orderId = event.payload['orderId']?.toString() ?? '';
         _addNotification(
           RiderNotificationModel(
-            id: '${event.type}-${event.payload['orderId']}-${DateTime.now().microsecondsSinceEpoch}',
+            id: '${event.type}-$orderId-${DateTime.now().microsecondsSinceEpoch}',
             type: RiderNotificationType.orderAccepted,
             title: 'Order accepted',
             message: 'Order locked to you. Head to the seller for pickup.',
@@ -571,45 +765,344 @@ class HomeViewModel extends BaseViewModel {
             showPopup: true,
           ),
         );
+        unawaited(_sendOrderAcceptedEmail(orderId));
         break;
       case 'payout_approved':
+        final amount = event.payload['amount']?.toString() ?? '0';
         _addNotification(
           RiderNotificationModel(
             id: '${event.type}-${DateTime.now().microsecondsSinceEpoch}',
             type: RiderNotificationType.payoutApproved,
             title: 'Payout approved',
             message:
-                'Your payout of Rs. ${event.payload['amount']} is approved.',
+                'Your payout of Rs. $amount is approved.',
             timeLabel: 'Now',
             showPopup: true,
           ),
         );
+        unawaited(_sendPayoutApprovedEmail(amount));
         break;
       case 'admin_message_received':
+        final message = event.payload['message']?.toString() ?? '';
         _addNotification(
           RiderNotificationModel(
             id: '${event.type}-${DateTime.now().microsecondsSinceEpoch}',
             type: RiderNotificationType.adminMessage,
             title: 'Admin message',
-            message: event.payload['message'].toString(),
+            message: message,
             timeLabel: 'Now',
             showPopup: true,
           ),
         );
+        unawaited(_sendAdminMessageEmail(message));
         break;
       case 'admin_announcement_received':
+        final title = event.payload['title']?.toString() ?? 'Announcement';
+        final message = event.payload['message']?.toString() ?? '';
         _addNotification(
           RiderNotificationModel(
             id: '${event.type}-${DateTime.now().microsecondsSinceEpoch}',
             type: RiderNotificationType.announcement,
-            title: event.payload['title'].toString(),
-            message: event.payload['message'].toString(),
+            title: title,
+            message: message,
             timeLabel: 'Now',
             showPopup: true,
           ),
         );
+        unawaited(_sendAnnouncementEmail(title, message));
+        break;
+      case 'withdrawal_requested':
+        final amount = event.payload['amount']?.toString() ?? '0';
+        final method = event.payload['method']?.toString() ?? 'JazzCash';
+        unawaited(_sendWithdrawalRequestedEmail(amount, method));
         break;
     }
+  }
+
+  Future<void> _sendNewOrderRequestEmail(String orderId, String sellerName) async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final subject = 'Vyraal Rider: New Delivery Request - $orderId';
+    final text = '''Hello Rider,
+
+A new delivery request is available near you!
+- Order ID: $orderId
+- Seller: $sellerName
+
+Open the Vyraal Rider app within 60 seconds to accept this order and earn delivery fees!''';
+
+    final html = '''
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background-color: #ffffff;">
+        <h2 style="color: #FF5A5F; margin-top: 0;">New Delivery Request Nearby!</h2>
+        <p style="font-size: 16px; color: #333;">Hello Rider,</p>
+        <p style="font-size: 15px; color: #555; line-height: 1.5;">
+          A new delivery request is available near your current location. Act fast to accept it!
+        </p>
+        <div style="margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #FF5A5F; border-radius: 4px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Order ID:</td>
+              <td style="padding: 6px 0; color: #333; font-weight: bold;">$orderId</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Pickup Shop:</td>
+              <td style="padding: 6px 0; color: #333;">$sellerName</td>
+            </tr>
+          </table>
+        </div>
+        <p style="font-size: 14px; color: #666; margin-top: 25px;">
+          Open the <strong>Vyraal Rider</strong> app now to accept the job before it gets assigned to another rider.
+        </p>
+      </div>
+    ''';
+
+    await RiderEmailNotificationService.instance.sendRiderEmail(
+      eventType: 'rider_new_delivery_request',
+      eventKey: '${orderId}_request',
+      subject: subject,
+      text: text,
+      html: html,
+      explicitTo: email,
+      extra: {
+        'orderId': orderId,
+        'sellerName': sellerName,
+      },
+    );
+  }
+
+  Future<void> _sendOrderAcceptedEmail(String orderId) async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final subject = 'Vyraal Rider: Order Confirmed - $orderId';
+    final text = '''Hello Rider,
+
+You have successfully accepted the order $orderId.
+Please head to the pickup shop to collect the products, and deliver them to the customer.
+
+Safe travels!''';
+
+    final html = '''
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background-color: #ffffff;">
+        <h2 style="color: #2CA58D; margin-top: 0;">Order Assigned</h2>
+        <p style="font-size: 16px; color: #333;">Hello Rider,</p>
+        <p style="font-size: 15px; color: #555; line-height: 1.5;">
+          You have successfully accepted order <strong>$orderId</strong>.
+        </p>
+        <div style="margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #2CA58D; border-radius: 4px;">
+          <p style="margin: 0; font-size: 14px; color: #333; line-height: 1.6;">
+            <strong>Step 1:</strong> Navigate to the merchant's store location.<br>
+            <strong>Step 2:</strong> Match the order items and pick up the package.<br>
+            <strong>Step 3:</strong> Proceed directly to delivery location.<br>
+          </p>
+        </div>
+        <p style="font-size: 14px; color: #666; margin-top: 25px;">
+          Please ensure safe driving. Navigate using maps directly in the <strong>Vyraal Rider</strong> app.
+        </p>
+      </div>
+    ''';
+
+    await RiderEmailNotificationService.instance.sendRiderEmail(
+      eventType: 'rider_order_accepted',
+      eventKey: '${orderId}_accepted',
+      subject: subject,
+      text: text,
+      html: html,
+      explicitTo: email,
+      extra: {
+        'orderId': orderId,
+      },
+    );
+  }
+
+  Future<void> _sendPayoutApprovedEmail(String amount) async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final subject = 'Vyraal Rider: Payout Approved of Rs. $amount';
+    final text = '''Hello Rider,
+
+Great news! Your payout request of Rs. $amount has been approved by the admin.
+The funds are on their way to your payment method.
+
+Keep up the great work!''';
+
+    final html = '''
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background-color: #ffffff;">
+        <h2 style="color: #4A90E2; margin-top: 0;">Payout Approved!</h2>
+        <p style="font-size: 16px; color: #333;">Hello Rider,</p>
+        <p style="font-size: 15px; color: #555; line-height: 1.5;">
+          Your payout request has been successfully reviewed and approved.
+        </p>
+        <div style="margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #4A90E2; border-radius: 4px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Status:</td>
+              <td style="padding: 6px 0; color: #2CA58D; font-weight: bold;">Approved</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Approved Amount:</td>
+              <td style="padding: 6px 0; color: #4A90E2; font-weight: bold; font-size: 16px;">Rs. $amount</td>
+            </tr>
+          </table>
+        </div>
+        <p style="font-size: 14px; color: #666; margin-top: 25px;">
+          Payout updates can take some time to process via bank transfers/wallets. Thank you for your service with <strong>Vyraal</strong>!
+        </p>
+      </div>
+    ''';
+
+    await RiderEmailNotificationService.instance.sendRiderEmail(
+      eventType: 'rider_payout_approved',
+      eventKey: 'payout_${DateTime.now().millisecondsSinceEpoch}',
+      subject: subject,
+      text: text,
+      html: html,
+      explicitTo: email,
+      extra: {
+        'amount': amount,
+      },
+    );
+  }
+
+  Future<void> _sendAdminMessageEmail(String message) async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final subject = 'Vyraal Rider: Message from Support';
+    final text = '''Hello Rider,
+
+You received a message from Vyraal Admin:
+
+"$message"
+
+Please open the app to reply if needed.''';
+
+    final html = '''
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background-color: #ffffff;">
+        <h2 style="color: #6C757D; margin-top: 0;">Support Message Received</h2>
+        <p style="font-size: 16px; color: #333;">Hello Rider,</p>
+        <p style="font-size: 15px; color: #555; line-height: 1.5;">
+          You have received a direct message from the Vyraal Support Admin:
+        </p>
+        <div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border: 1px dashed #ced4da; border-radius: 4px; font-style: italic; color: #495057;">
+          "$message"
+        </div>
+        <p style="font-size: 14px; color: #666; margin-top: 25px;">
+          Please launch the <strong>Vyraal Rider</strong> app to chat with support.
+        </p>
+      </div>
+    ''';
+
+    await RiderEmailNotificationService.instance.sendRiderEmail(
+      eventType: 'rider_admin_message',
+      eventKey: 'admin_msg_${message.hashCode}',
+      subject: subject,
+      text: text,
+      html: html,
+      explicitTo: email,
+      extra: {
+        'message': message,
+      },
+    );
+  }
+
+  Future<void> _sendAnnouncementEmail(String title, String message) async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final subject = 'Vyraal Announcement: $title';
+    final text = '''Hello Rider,
+
+A new administrative announcement has been published:
+
+$title
+$message''';
+
+    final html = '''
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background-color: #ffffff;">
+        <h2 style="color: #F0AD4E; margin-top: 0;">New Announcement</h2>
+        <p style="font-size: 16px; color: #333;">Hello Rider,</p>
+        <p style="font-size: 15px; color: #555; line-height: 1.5; font-weight: bold;">
+          $title
+        </p>
+        <div style="margin: 20px 0; padding: 15px; background-color: #fcf8e3; border-left: 4px solid #F0AD4E; border-radius: 4px; color: #8a6d3b; line-height: 1.6;">
+          $message
+        </div>
+        <p style="font-size: 14px; color: #666; margin-top: 25px;">
+          Stay safe out there! Thank you for partnering with <strong>Vyraal</strong>.
+        </p>
+      </div>
+    ''';
+
+    await RiderEmailNotificationService.instance.sendRiderEmail(
+      eventType: 'rider_announcement',
+      eventKey: 'announcement_${title.hashCode}_${message.hashCode}',
+      subject: subject,
+      text: text,
+      html: html,
+      explicitTo: email,
+      extra: {
+        'title': title,
+        'message': message,
+      },
+    );
+  }
+
+  Future<void> _sendWithdrawalRequestedEmail(String amount, String method) async {
+    final email = FirebaseAuth.instance.currentUser?.email;
+    if (email == null || email.isEmpty) return;
+
+    final subject = 'Vyraal: Withdrawal Request Submitted of Rs. $amount';
+    final text = '''Hello Rider,
+
+We have received your withdrawal request of Rs. $amount via $method.
+Our team is reviewing the transaction details and will process it shortly.
+
+Thank you for your patience!''';
+
+    final html = '''
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 8px; background-color: #ffffff;">
+        <h2 style="color: #17A2B8; margin-top: 0;">Withdrawal Request Submitted</h2>
+        <p style="font-size: 16px; color: #333;">Hello Rider,</p>
+        <p style="font-size: 15px; color: #555; line-height: 1.5;">
+          We have received your withdrawal request. It is currently under review.
+        </p>
+        <div style="margin: 20px 0; padding: 15px; background-color: #f9f9f9; border-left: 4px solid #17A2B8; border-radius: 4px;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Method:</td>
+              <td style="padding: 6px 0; color: #333;">$method</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Amount:</td>
+              <td style="padding: 6px 0; color: #17A2B8; font-weight: bold; font-size: 16px;">Rs. $amount</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; color: #666; font-weight: bold;">Status:</td>
+              <td style="padding: 6px 0; color: #F0AD4E; font-weight: bold;">Under Review</td>
+            </tr>
+          </table>
+        </div>
+        <p style="font-size: 14px; color: #666; margin-top: 25px;">
+          Withdrawal processing usually takes up to 24 hours. You can review request updates in the Rider app wallet page.
+        </p>
+      </div>
+    ''';
+
+    await RiderEmailNotificationService.instance.sendRiderEmail(
+      eventType: 'rider_withdrawal_requested',
+      eventKey: 'withdrawal_${DateTime.now().millisecondsSinceEpoch}',
+      subject: subject,
+      text: text,
+      html: html,
+      explicitTo: email,
+      extra: {
+        'amount': amount,
+        'method': method,
+      },
+    );
   }
 
   void _addNotification(RiderNotificationModel notification) {
@@ -941,9 +1434,11 @@ class HomeViewModel extends BaseViewModel {
 
   String get _riderId {
     try {
-      return FirebaseAuth.instance.currentUser?.uid ?? 'demo-rider';
+      return FirebaseAuth.instance.currentUser?.uid ??
+          _sessionRiderId ??
+          'demo-rider';
     } catch (_) {
-      return 'demo-rider';
+      return _sessionRiderId ?? 'demo-rider';
     }
   }
 
@@ -957,6 +1452,7 @@ class HomeViewModel extends BaseViewModel {
     unawaited(_riderEarningsSubscription?.cancel());
     unawaited(_userEarningsSubscription?.cancel());
     unawaited(_riderStatsSubscription?.cancel());
+    unawaited(_userProfileSubscription?.cancel());
     for (final timer in _requestTimers.values) {
       timer.cancel();
     }

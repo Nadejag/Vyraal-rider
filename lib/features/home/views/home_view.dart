@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../config/routes/app_routes.dart';
+import '../../../core/widgets/rider_image.dart';
 import '../models/home_model.dart';
 import '../view_models/home_view_model.dart';
 
@@ -65,18 +66,16 @@ class _HomeBody extends StatelessWidget {
                       _WorkStatusCard(
                         profile: model.profile,
                         isChanging: vm.isChangingStatus,
-                        onToggle: vm.toggleWorkStatus,
+                        onToggle: (value) {
+                          vm.toggleWorkStatus(value);
+                        },
                       ),
                       const SizedBox(height: 14),
                       if (vm.isLoading) ...[
                         const _DashboardSkeleton(),
                       ] else ...[
-                        _StatsGrid(model: model),
-                        const SizedBox(height: 16),
-                        _WeeklyEarningsCard(model: model),
-                        const SizedBox(height: 16),
                         _AvailableOrdersSection(
-                          orders: model.orders,
+                          orders: vm.availableOrders,
                           isBusy: vm.isBusy,
                           isOnline: vm.isOnline,
                           isAccepting: vm.isAcceptingOrder,
@@ -89,6 +88,10 @@ class _HomeBody extends StatelessWidget {
                           },
                           onDecline: vm.declineOrder,
                         ),
+                        const SizedBox(height: 16),
+                        _StatsGrid(model: model),
+                        const SizedBox(height: 16),
+                        _WeeklyEarningsCard(model: model),
                         const SizedBox(height: 16),
                         _HistoryPreview(model: model),
                       ],
@@ -114,102 +117,368 @@ class _Header extends StatelessWidget {
     final name = profile.fullName.trim().isEmpty ? 'Rider' : profile.fullName;
     return Row(
       children: [
-        Container(
-          width: 54,
-          height: 54,
-          decoration: BoxDecoration(
-            color: _HomeBody._gold,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x22FFC107),
-                blurRadius: 16,
-                offset: Offset(0, 8),
-              ),
-            ],
-          ),
-          child: profile.profilePhotoUrl == null
-              ? const Icon(
+        GestureDetector(
+          onTap: () {
+            Navigator.of(context).pushNamed(AppRoutes.profile);
+          },
+          child: Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: _HomeBody._gold,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x22FFC107),
+                  blurRadius: 16,
+                  offset: Offset(0, 8),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(18),
+              child: RiderImage(
+                url: profile.profilePhotoUrl,
+                base64: profile.profilePhotoUrl,
+                fallback: const Icon(
                   Icons.delivery_dining_rounded,
                   color: _HomeBody._dark,
                   size: 30,
-                )
-              : ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: Image.network(
-                    profile.profilePhotoUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const Icon(
-                      Icons.delivery_dining_rounded,
-                      color: _HomeBody._dark,
-                      size: 30,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              Navigator.of(context).pushNamed(AppRoutes.profile);
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Assalam-o-Alaikum',
+                  style: TextStyle(
+                    color: _HomeBody._muted,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: _HomeBody._dark,
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        InkWell(
+          onTap: () {
+            final vm = context.read<HomeViewModel>();
+            _showSettingsModal(context, vm);
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: _HomeBody._border),
+            ),
+            child: const Icon(
+              Icons.settings_suggest_rounded,
+              color: _HomeBody._dark,
+              size: 22,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showSettingsModal(BuildContext context, HomeViewModel vm) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return _SettingsModal(vm: vm);
+      },
+    );
+  }
+}
+
+class _SettingsModal extends StatefulWidget {
+  const _SettingsModal({required this.vm});
+  final HomeViewModel vm;
+
+  @override
+  State<_SettingsModal> createState() => _SettingsModalState();
+}
+
+class _SettingsModalState extends State<_SettingsModal> {
+  late final TextEditingController _emailController;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(
+      text: widget.vm.model.profile.email,
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: widget.vm,
+      builder: (context, _) {
+        final prof = widget.vm.model.profile;
+        // Sync if updated externally
+        if (_emailController.text != prof.email) {
+          _emailController.text = prof.email;
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              20,
+              24,
+              20 + MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 48,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7EB),
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Settings & Preferences',
+                  style: TextStyle(
+                    color: _HomeBody._dark,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Manage your real-time notification settings',
+                  style: TextStyle(
+                    color: _HomeBody._muted,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
+                _buildToggleRow(
+                  icon: Icons.notifications_active_rounded,
+                  title: 'Push Notifications',
+                  subtitle: 'Alerts for new nearby orders',
+                  value: prof.alertsEnabled,
+                  onChanged: widget.vm.toggleAlerts,
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Divider(color: Color(0xFFF3F4F6)),
+                ),
+                _buildToggleRow(
+                  icon: Icons.alternate_email_rounded,
+                  title: 'Email Notifications',
+                  subtitle: 'Real-time order & account updates',
+                  value: prof.emailNotificationsEnabled,
+                  onChanged: widget.vm.toggleEmailNotifications,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Notification Email Address',
+                  style: TextStyle(
+                    color: _HomeBody._dark,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: InputDecoration(
+                          hintText: 'Enter email for notifications',
+                          filled: true,
+                          fillColor: const Color(0xFFF9FAFB),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFFE5E7EB),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: _HomeBody._gold,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        style: const TextStyle(
+                          color: _HomeBody._dark,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final saved = await widget.vm.updateEmail(
+                          _emailController.text,
+                        );
+                        if (!context.mounted || !saved) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Notification email saved successfully!',
+                            ),
+                            backgroundColor: _HomeBody._green,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _HomeBody._dark,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                          horizontal: 16,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text(
+                        'Save',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _HomeBody._gold,
+                    foregroundColor: _HomeBody._dark,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildToggleRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: _HomeBody._gold.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: _HomeBody._dark, size: 22),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 14),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Assalam-o-Alaikum',
-                style: TextStyle(
-                  color: _HomeBody._muted,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                title,
+                style: const TextStyle(
+                  color: _HomeBody._dark,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: _HomeBody._dark,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
+                subtitle,
+                style: TextStyle(
+                  color: _HomeBody._muted.withValues(alpha: 0.85),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
         ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: profile.isApproved
-                ? _HomeBody._green.withValues(alpha: 0.12)
-                : _HomeBody._gold.withValues(alpha: 0.20),
-            borderRadius: BorderRadius.circular(100),
-            border: Border.all(
-              color: profile.isApproved
-                  ? _HomeBody._green.withValues(alpha: 0.25)
-                  : _HomeBody._border,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                profile.isApproved
-                    ? Icons.verified_rounded
-                    : Icons.pending_actions_rounded,
-                size: 16,
-                color: profile.isApproved ? _HomeBody._green : _HomeBody._dark,
-              ),
-              const SizedBox(width: 5),
-              Text(
-                profile.isApproved ? 'Verified' : 'Setup needed',
-                style: TextStyle(
-                  color: profile.isApproved
-                      ? _HomeBody._green
-                      : _HomeBody._dark,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
+        Switch.adaptive(
+          value: value,
+          activeThumbColor: _HomeBody._green,
+          onChanged: onChanged,
         ),
       ],
     );
@@ -353,6 +622,7 @@ class _StatsGrid extends StatelessWidget {
           value: model.todayEarnings,
           icon: Icons.payments_rounded,
           color: _HomeBody._green,
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.withdraw),
         ),
         _StatCard(
           title: 'Total Trips',
@@ -365,6 +635,7 @@ class _StatsGrid extends StatelessWidget {
           value: model.hoursOnline.toStringAsFixed(1),
           icon: Icons.timer_rounded,
           color: _HomeBody._red,
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.history),
         ),
       ],
     );
@@ -377,16 +648,18 @@ class _StatCard extends StatelessWidget {
     required this.value,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   final String title;
   final String value;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cardContent = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _HomeBody._card,
@@ -446,6 +719,15 @@ class _StatCard extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: cardContent,
+      );
+    }
+    return cardContent;
   }
 }
 
@@ -461,89 +743,93 @@ class _WeeklyEarningsCard extends StatelessWidget {
       (previous, item) => item.amount > previous ? item.amount : previous,
     );
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _HomeBody._card,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _HomeBody._border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Weekly Earnings',
+    return InkWell(
+      onTap: () => Navigator.of(context).pushNamed(AppRoutes.withdraw),
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _HomeBody._card,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: _HomeBody._border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Weekly Earnings',
+                    style: TextStyle(
+                      color: _HomeBody._dark,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                Text(
+                  model.weeklyGrowth,
                   style: TextStyle(
-                    color: _HomeBody._dark,
-                    fontSize: 16,
+                    color: model.weeklyGrowth.startsWith('-')
+                        ? _HomeBody._red
+                        : _HomeBody._green,
+                    fontSize: 12,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-              ),
-              Text(
-                model.weeklyGrowth,
-                style: TextStyle(
-                  color: model.weeklyGrowth.startsWith('-')
-                      ? _HomeBody._red
-                      : _HomeBody._green,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${model.weekRange} • ${model.weeklyTotal}',
-            style: const TextStyle(
-              color: _HomeBody._muted,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+              ],
             ),
-          ),
-          const SizedBox(height: 18),
-          SizedBox(
-            height: 92,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: model.weeklyEarnings.map((item) {
-                final height = 18 + ((item.amount / max) * 62);
-                return Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 420),
-                        height: height,
-                        width: 18,
-                        decoration: BoxDecoration(
-                          color: item.isToday
-                              ? _HomeBody._gold
-                              : const Color(0xFFFFE8A3),
-                          borderRadius: BorderRadius.circular(100),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        item.day,
-                        style: TextStyle(
-                          color: item.isToday
-                              ? _HomeBody._dark
-                              : _HomeBody._muted,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+            const SizedBox(height: 4),
+            Text(
+              '${model.weekRange} • ${model.weeklyTotal}',
+              style: const TextStyle(
+                color: _HomeBody._muted,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 18),
+            SizedBox(
+              height: 92,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: model.weeklyEarnings.map((item) {
+                  final height = 18 + ((item.amount / max) * 62);
+                  return Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 420),
+                          height: height,
+                          width: 18,
+                          decoration: BoxDecoration(
+                            color: item.isToday
+                                ? _HomeBody._gold
+                                : const Color(0xFFFFE8A3),
+                            borderRadius: BorderRadius.circular(100),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          item.day,
+                          style: TextStyle(
+                            color: item.isToday
+                                ? _HomeBody._dark
+                                : _HomeBody._muted,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -718,6 +1004,42 @@ class _OrderCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: (order.remainingSeconds.clamp(0, 60)) / 60.0,
+              backgroundColor: const Color(0xFFF3F4F6),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                order.remainingSeconds > 15 ? _HomeBody._gold : _HomeBody._red,
+              ),
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Acceptance Window',
+                style: TextStyle(
+                  color: _HomeBody._muted.withValues(alpha: 0.8),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                '${order.remainingSeconds}s remaining',
+                style: TextStyle(
+                  color: order.remainingSeconds > 15
+                      ? _HomeBody._dark
+                      : _HomeBody._red,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -816,16 +1138,14 @@ class _ShopAvatar extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: order.shopImageUrl == null
-            ? const Icon(Icons.storefront_rounded, color: _HomeBody._dark)
-            : Image.network(
-                order.shopImageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const Icon(
-                  Icons.storefront_rounded,
-                  color: _HomeBody._dark,
-                ),
-              ),
+        child: RiderImage(
+          url: order.shopImageUrl,
+          base64: order.shopImageBase64 ?? order.shopImageUrl,
+          fallback: const Icon(
+            Icons.storefront_rounded,
+            color: _HomeBody._dark,
+          ),
+        ),
       ),
     );
   }
@@ -1099,8 +1419,8 @@ class _SkeletonCardState extends State<_SkeletonCard>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
   }
 
   @override
@@ -1111,15 +1431,223 @@ class _SkeletonCardState extends State<_SkeletonCard>
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween<double>(begin: 0.45, end: 1).animate(_controller),
-      child: Container(
-        height: widget.height,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _HomeBody._border),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          height: widget.height,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: _HomeBody._border),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: const [
+                Color(0xFFFCFBF9),
+                Color(0xFFF3F1ED),
+                Color(0xFFFCFBF9),
+              ],
+              stops: [
+                (_controller.value - 0.3).clamp(0.0, 1.0),
+                _controller.value,
+                (_controller.value + 0.3).clamp(0.0, 1.0),
+              ],
+            ),
+          ),
+          child: _buildDefaultSkeletonLayout(),
+        );
+      },
+    );
+  }
+
+  Widget _buildDefaultSkeletonLayout() {
+    final h = widget.height ?? 0;
+    if (h == 164) {
+      // Weekly earnings card skeleton
+      return Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  width: 120,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAE6DF),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                ),
+                Container(
+                  width: 50,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAE6DF),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Container(
+              width: 160,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE3DED7),
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(7, (idx) {
+                final barHeight = 20.0 + (idx * 8) % 45;
+                return Container(
+                  width: 16,
+                  height: barHeight,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFECE6),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              }),
+            ),
+          ],
         ),
+      );
+    } else if (h == 180) {
+      // Available orders/list card skeleton
+      return Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEAE6DF),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 100,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE3DED7),
+                          borderRadius: BorderRadius.circular(7),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        width: 140,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFECE6),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Container(
+              width: double.infinity,
+              height: 42,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFECE6),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEAE6DF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: Container(
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3DED7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Default Metric Card loader
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                width: 65,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAE6DF),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              Container(
+                width: 20,
+                height: 20,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFEFECE6),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Container(
+            width: 90,
+            height: 24,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE3DED7),
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: 45,
+            height: 10,
+            decoration: BoxDecoration(
+              color: const Color(0xFFEFECE6),
+              borderRadius: BorderRadius.circular(5),
+            ),
+          ),
+        ],
       ),
     );
   }

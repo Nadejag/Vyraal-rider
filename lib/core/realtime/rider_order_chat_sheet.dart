@@ -211,7 +211,7 @@ class _RiderOrderChatSheetState extends State<RiderOrderChatSheet> {
     _controller.clear();
     final key = _firebaseKey(widget.orderId);
     final ref = vyraalDatabase.ref('orderChats/$key/messages').push();
-    await ref.set({
+    final message = {
       'id': ref.key,
       'orderId': widget.orderId,
       'senderId': _currentUid(),
@@ -219,6 +219,17 @@ class _RiderOrderChatSheetState extends State<RiderOrderChatSheet> {
       'senderName': _currentName(),
       'text': text,
       'createdAt': ServerValue.timestamp,
+    };
+    await vyraalDatabase.ref().update({
+      'orderChats/$key/orderId': widget.orderId,
+      'orderChats/$key/updatedAt': ServerValue.timestamp,
+      'orderChats/$key/lastMessage': text,
+      'orderChats/$key/lastSenderRole': 'rider',
+      'orderChats/$key/messages/${ref.key}': message,
+      'orders/$key/chatLastMessage': text,
+      'orders/$key/chatUpdatedAt': ServerValue.timestamp,
+      'deliveryRequests/$key/chatLastMessage': text,
+      'deliveryRequests/$key/chatUpdatedAt': ServerValue.timestamp,
     });
   }
 

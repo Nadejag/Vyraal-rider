@@ -323,7 +323,10 @@ class _DeliverySheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   IconButton(
-                    onPressed: viewModel.callCustomer,
+                    onPressed: () {
+                      viewModel.callCustomer();
+                      _callPhone(viewModel.model.customerPhone);
+                    },
                     tooltip: 'Call customer',
                     style: IconButton.styleFrom(
                       backgroundColor: DeliveryNavigationView._softBlueColor,
@@ -372,6 +375,7 @@ class _DeliverySheet extends StatelessWidget {
             const SizedBox(height: 12),
             _ProofPhotoCard(
               hasPhoto: viewModel.model.hasDeliveryPhoto,
+              isUploading: viewModel.isBusy,
               onUpload: viewModel.uploadDeliveryPhoto,
             ),
             const SizedBox(height: 14),
@@ -561,15 +565,20 @@ class _AddressRouteCard extends StatelessWidget {
 }
 
 class _ProofPhotoCard extends StatelessWidget {
-  const _ProofPhotoCard({required this.hasPhoto, required this.onUpload});
+  const _ProofPhotoCard({
+    required this.hasPhoto,
+    required this.isUploading,
+    required this.onUpload,
+  });
 
   final bool hasPhoto;
+  final bool isUploading;
   final VoidCallback onUpload;
 
   @override
   Widget build(BuildContext context) {
     return OutlinedButton(
-      onPressed: hasPhoto ? null : onUpload,
+      onPressed: hasPhoto || isUploading ? null : onUpload,
       style: OutlinedButton.styleFrom(
         disabledForegroundColor: const Color(0xFF00A86B),
         foregroundColor: DeliveryNavigationView._inkColor,
@@ -587,7 +596,9 @@ class _ProofPhotoCard extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            hasPhoto
+            isUploading
+                ? Icons.cloud_upload_outlined
+                : hasPhoto
                 ? Icons.photo_camera_back_rounded
                 : Icons.add_a_photo_outlined,
             size: 21,
@@ -601,6 +612,8 @@ class _ProofPhotoCard extends StatelessWidget {
                 Text(
                   hasPhoto
                       ? 'Delivery photo uploaded'
+                      : isUploading
+                      ? 'Uploading delivery photo'
                       : 'Upload delivery photo',
                   style: const TextStyle(
                     fontSize: 13,
@@ -612,6 +625,8 @@ class _ProofPhotoCard extends StatelessWidget {
                 Text(
                   hasPhoto
                       ? 'Proof of delivery is attached'
+                      : isUploading
+                      ? 'Saving proof in realtime...'
                       : 'Optional proof after handing items at the door',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -624,14 +639,20 @@ class _ProofPhotoCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(
-            hasPhoto
-                ? Icons.check_circle_outline_rounded
-                : Icons.upload_rounded,
-            color: hasPhoto
-                ? const Color(0xFF00A86B)
-                : DeliveryNavigationView._darkGoldColor,
-          ),
+          isUploading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(
+                  hasPhoto
+                      ? Icons.check_circle_outline_rounded
+                      : Icons.upload_rounded,
+                  color: hasPhoto
+                      ? const Color(0xFF00A86B)
+                      : DeliveryNavigationView._darkGoldColor,
+                ),
         ],
       ),
     );

@@ -391,11 +391,13 @@ class RiderProfileModel {
     required this.bikeRegistrationNumber,
     required this.vehicleName,
     required this.memberSince,
+    this.email = '',
     this.isOnline = false,
     this.isBusy = false,
     this.hasProfilePhoto = false,
     this.language = 'English',
     this.alertsEnabled = true,
+    this.emailNotificationsEnabled = true,
     this.cnicStatus = DocumentReviewStatus.missing,
     this.bikeDocsStatus = DocumentReviewStatus.missing,
     this.profilePhotoUrl,
@@ -408,11 +410,13 @@ class RiderProfileModel {
   final String bikeRegistrationNumber;
   final String vehicleName;
   final String memberSince;
+  final String email;
   final bool isOnline;
   final bool isBusy;
   final bool hasProfilePhoto;
   final String language;
   final bool alertsEnabled;
+  final bool emailNotificationsEnabled;
   final DocumentReviewStatus cnicStatus;
   final DocumentReviewStatus bikeDocsStatus;
   final String? profilePhotoUrl;
@@ -425,9 +429,11 @@ class RiderProfileModel {
     bikeRegistrationNumber: '',
     vehicleName: '',
     memberSince: '',
+    email: '',
     isOnline: false,
     isBusy: false,
     hasProfilePhoto: false,
+    emailNotificationsEnabled: true,
     cnicStatus: DocumentReviewStatus.missing,
     bikeDocsStatus: DocumentReviewStatus.missing,
   );
@@ -436,7 +442,7 @@ class RiderProfileModel {
       cnicStatus == DocumentReviewStatus.approved &&
       bikeDocsStatus == DocumentReviewStatus.approved;
 
-  String get workStatusLabel {
+  String get displayStatus {
     if (isBusy) return 'Busy';
     return isOnline ? 'Online' : 'Offline';
   }
@@ -448,11 +454,13 @@ class RiderProfileModel {
     String? bikeRegistrationNumber,
     String? vehicleName,
     String? memberSince,
+    String? email,
     bool? isOnline,
     bool? isBusy,
     bool? hasProfilePhoto,
     String? language,
     bool? alertsEnabled,
+    bool? emailNotificationsEnabled,
     DocumentReviewStatus? cnicStatus,
     DocumentReviewStatus? bikeDocsStatus,
     String? profilePhotoUrl,
@@ -466,11 +474,14 @@ class RiderProfileModel {
           bikeRegistrationNumber ?? this.bikeRegistrationNumber,
       vehicleName: vehicleName ?? this.vehicleName,
       memberSince: memberSince ?? this.memberSince,
+      email: email ?? this.email,
       isOnline: isOnline ?? this.isOnline,
       isBusy: isBusy ?? this.isBusy,
       hasProfilePhoto: hasProfilePhoto ?? this.hasProfilePhoto,
       language: language ?? this.language,
       alertsEnabled: alertsEnabled ?? this.alertsEnabled,
+      emailNotificationsEnabled:
+          emailNotificationsEnabled ?? this.emailNotificationsEnabled,
       cnicStatus: cnicStatus ?? this.cnicStatus,
       bikeDocsStatus: bikeDocsStatus ?? this.bikeDocsStatus,
       profilePhotoUrl: profilePhotoUrl ?? this.profilePhotoUrl,
@@ -480,7 +491,9 @@ class RiderProfileModel {
 
   factory RiderProfileModel.fromJson(Map<String, dynamic> json) {
     final cnicStatus = _docStatus(
-      json['cnicStatus'] ?? json['cnicVerificationStatus'] ?? json['cnicReviewStatus'],
+      json['cnicStatus'] ??
+          json['cnicVerificationStatus'] ??
+          json['cnicReviewStatus'],
     );
     final bikeStatus = _docStatus(
       json['bikeDocsStatus'] ??
@@ -488,25 +501,50 @@ class RiderProfileModel {
           json['bikeVerificationStatus'] ??
           json['licenseStatus'],
     );
-    final photo = _string(json['profilePhotoUrl'] ?? json['avatarUrl'] ?? json['photoUrl']);
+    final photo = _string(
+      json['profilePhotoUrl'] ??
+          json['profilePhotoBase64'] ??
+          json['avatarUrl'] ??
+          json['photoUrl'] ??
+          json['profileImageUrl'] ??
+          json['profileImageBase64'],
+    );
     return RiderProfileModel(
-      fullName: _string(json['fullName'] ?? json['name'] ?? json['riderName'], fallback: 'Rider'),
+      fullName: _string(
+        json['fullName'] ?? json['name'] ?? json['riderName'],
+        fallback: 'Rider',
+      ),
       phoneNumber: _string(json['phoneNumber'] ?? json['phone']),
       cnic: _string(json['cnic']),
       bikeRegistrationNumber: _string(
-        json['bikeRegistrationNumber'] ?? json['bikeNumber'] ?? json['vehicleNumber'],
+        json['bikeRegistrationNumber'] ??
+            json['bikeNumber'] ??
+            json['vehicleNumber'],
       ),
-      vehicleName: _string(json['vehicleName'] ?? json['bikeName'] ?? json['vehicleType']),
+      vehicleName: _string(
+        json['vehicleName'] ?? json['bikeName'] ?? json['vehicleType'],
+      ),
       memberSince: _memberSince(json['createdAt'] ?? json['joinedAt']),
+      email: _string(json['email']),
       isOnline: _bool(json['isOnline'] ?? json['online']),
       isBusy: _bool(json['isBusy'] ?? json['busy']),
       hasProfilePhoto: photo.isNotEmpty,
       language: _string(json['language'], fallback: 'English'),
-      alertsEnabled: json['alertsEnabled'] is bool ? json['alertsEnabled'] as bool : true,
+      alertsEnabled: json['alertsEnabled'] is bool
+          ? json['alertsEnabled'] as bool
+          : true,
+      emailNotificationsEnabled: json['emailNotificationsEnabled'] is bool
+          ? json['emailNotificationsEnabled'] as bool
+          : (json['emailNotificationsEnabled'] != null
+                ? _bool(json['emailNotificationsEnabled'])
+                : true),
       cnicStatus: cnicStatus,
       bikeDocsStatus: bikeStatus,
       profilePhotoUrl: photo.isEmpty ? null : photo,
-      verificationStatus: _string(json['verificationStatus'], fallback: _verificationLabel(cnicStatus, bikeStatus)),
+      verificationStatus: _string(
+        json['verificationStatus'],
+        fallback: _verificationLabel(cnicStatus, bikeStatus),
+      ),
     );
   }
 
@@ -524,11 +562,15 @@ class RiderProfileModel {
 
   static DocumentReviewStatus _docStatus(Object? value) {
     final text = value?.toString().toLowerCase().trim() ?? '';
-    if (text == 'approved' || text == 'verified') return DocumentReviewStatus.approved;
+    if (text == 'approved' || text == 'verified') {
+      return DocumentReviewStatus.approved;
+    }
     if (text == 'pending' || text == 'submitted' || text == 'under_review') {
       return DocumentReviewStatus.pending;
     }
-    if (text == 'rejected' || text == 'declined') return DocumentReviewStatus.rejected;
+    if (text == 'rejected' || text == 'declined') {
+      return DocumentReviewStatus.rejected;
+    }
     return DocumentReviewStatus.missing;
   }
 
@@ -536,13 +578,16 @@ class RiderProfileModel {
     DocumentReviewStatus cnic,
     DocumentReviewStatus bike,
   ) {
-    if (cnic == DocumentReviewStatus.approved && bike == DocumentReviewStatus.approved) {
+    if (cnic == DocumentReviewStatus.approved &&
+        bike == DocumentReviewStatus.approved) {
       return 'approved';
     }
-    if (cnic == DocumentReviewStatus.rejected || bike == DocumentReviewStatus.rejected) {
+    if (cnic == DocumentReviewStatus.rejected ||
+        bike == DocumentReviewStatus.rejected) {
       return 'rejected';
     }
-    if (cnic == DocumentReviewStatus.pending || bike == DocumentReviewStatus.pending) {
+    if (cnic == DocumentReviewStatus.pending ||
+        bike == DocumentReviewStatus.pending) {
       return 'pending';
     }
     return 'incomplete';

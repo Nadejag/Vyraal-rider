@@ -12,6 +12,7 @@ import '../../../core/maps/rider_map_models.dart';
 import '../../../core/realtime/rider_active_delivery_store.dart';
 import '../../../core/realtime/rider_delivery_repository.dart';
 import '../../../core/realtime/rider_realtime_service.dart';
+import '../../../core/services/rider_image_upload_service.dart';
 import '../../home/models/home_model.dart';
 import '../models/navigation_model.dart';
 
@@ -30,15 +31,19 @@ class PickupNavigationViewModel extends BaseViewModel {
        _deliveryRepository = deliveryRepository ?? RiderDeliveryRepository() {
     final order = RiderActiveDeliveryStore.instance.activeOrder;
     if (order != null) {
-      final hasShopLocation = order.sellerLat != null && order.sellerLng != null;
+      final hasShopLocation =
+          order.sellerLat != null && order.sellerLng != null;
       model = PickupNavigationModel(
         orderId: order.id,
         sellerName: order.storeName,
         sellerPhone: order.sellerPhone ?? '',
         estimatedEarning: order.estimatedEarning,
         itemsCount: order.itemCount,
-        address: order.sellerAddress ??
-            (hasShopLocation ? 'Pinned seller shop location' : 'Seller pickup location not set'),
+        address:
+            order.sellerAddress ??
+            (hasShopLocation
+                ? 'Pinned seller shop location'
+                : 'Seller pickup location not set'),
         sellerImageUrl: order.shopImageUrl,
         sellerImageBase64: order.shopImageBase64,
         hasShopLocation: hasShopLocation,
@@ -149,12 +154,14 @@ class DeliveryNavigationViewModel extends BaseViewModel {
     OsrmRouteService routeService = const OsrmRouteService(),
     RiderLiveLocationRepository? liveLocationRepository,
     RiderDeliveryRepository? deliveryRepository,
+    RiderImageUploadService? imageUploadService,
   }) : _realtimeService = realtimeService ?? RiderRealtimeService.instance,
        _locationService = locationService,
        _routeService = routeService,
        _liveLocationRepository =
            liveLocationRepository ?? RiderLiveLocationRepository(),
-       _deliveryRepository = deliveryRepository ?? RiderDeliveryRepository() {
+       _deliveryRepository = deliveryRepository ?? RiderDeliveryRepository(),
+       _imageUploadService = imageUploadService ?? RiderImageUploadService() {
     final order = RiderActiveDeliveryStore.instance.activeOrder;
     if (order != null && order.customerName != null) {
       _model = DeliveryNavigationModel(
@@ -176,6 +183,7 @@ class DeliveryNavigationViewModel extends BaseViewModel {
   final OsrmRouteService _routeService;
   final RiderLiveLocationRepository _liveLocationRepository;
   final RiderDeliveryRepository _deliveryRepository;
+  final RiderImageUploadService _imageUploadService;
   StreamSubscription<RiderLocationReading>? _locationSubscription;
   LatLng? _lastLivePosition;
   var _refreshingRoute = false;
@@ -196,16 +204,33 @@ class DeliveryNavigationViewModel extends BaseViewModel {
     );
   }
 
-  void uploadDeliveryPhoto() {
+  Future<void> uploadDeliveryPhoto() async {
     if (_model.hasDeliveryPhoto) return;
-
-    _model = _model.copyWith(hasDeliveryPhoto: true);
     final order = RiderActiveDeliveryStore.instance.activeOrder;
-    if (order != null) {
-      unawaited(_deliveryRepository.uploadDeliveryProof(order));
+    if (order == null) return;
+
+    setBusy(true);
+    try {
+      final picked = await _imageUploadService.pickDocumentImage(
+        imageQuality: 70,
+        maxWidth: 1280,
+        maxHeight: 1280,
+      );
+      if (picked == null) return;
+
+      await _deliveryRepository.uploadDeliveryProof(
+        order,
+        proofImageBase64: picked.base64Data,
+        proofImageUrl: picked.dataUri,
+      );
+      _model = _model.copyWith(hasDeliveryPhoto: true);
+      _realtimeService.deliveryPhotoUploaded(_model.orderId);
+      notifyListeners();
+    } catch (_) {
+      setError('Could not upload delivery photo. Try again.');
+    } finally {
+      setBusy(false);
     }
-    _realtimeService.deliveryPhotoUploaded(_model.orderId);
-    notifyListeners();
   }
 
   void markDelivered() {
@@ -299,7 +324,9 @@ RiderNavigationSnapshot _snapshotForOrder(RiderOrderModel order) {
   final deliveryLng = order.deliveryLng;
   final hasSeller = sellerLat != null && sellerLng != null;
   final hasCustomer = deliveryLat != null && deliveryLng != null;
-  final seller = hasSeller ? LatLng(sellerLat, sellerLng) : DemoMapPoints.seller;
+  final seller = hasSeller
+      ? LatLng(sellerLat, sellerLng)
+      : DemoMapPoints.seller;
   final customer = hasCustomer
       ? LatLng(deliveryLat, deliveryLng)
       : DemoMapPoints.customer;
