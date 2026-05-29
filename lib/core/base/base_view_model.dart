@@ -5,6 +5,7 @@ abstract class BaseViewModel extends ChangeNotifier {
   String? _errorMessage;
 
   bool get isBusy => _isBusy;
+  bool get busy => _isBusy;
   String? get errorMessage => _errorMessage;
   bool get hasError => _errorMessage != null;
 

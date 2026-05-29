@@ -1,30 +1,39 @@
 class PickupNavigationModel {
   const PickupNavigationModel({
-    this.sellerName = 'Amanat Dairy',
-    this.estimatedEarning = 'Rs. 80',
-    this.itemsCount = 2,
-    this.timeAway = '4 mins\naway',
-    this.address =
-        'Plot 42, Sector 18, Commercial Hub\nNear Metro Pillar 124, Landmark:\nCity Bank',
+    this.orderId = '',
+    this.sellerName = 'Seller',
+    this.sellerPhone = '',
+    this.estimatedEarning = 'Rs. 0',
+    this.itemsCount = 0,
+    this.timeAway = 'Calculating',
+    this.address = 'Seller pickup location not set',
+    this.sellerImageUrl,
+    this.sellerImageBase64,
+    this.hasShopLocation = false,
   });
 
+  final String orderId;
   final String sellerName;
+  final String sellerPhone;
   final String estimatedEarning;
   final int itemsCount;
   final String timeAway;
   final String address;
+  final String? sellerImageUrl;
+  final String? sellerImageBase64;
+  final bool hasShopLocation;
 }
 
 class DeliveryNavigationModel {
   const DeliveryNavigationModel({
-    this.orderId = 'order-amanat-dairy',
-    this.customerName = 'Ahmed Ali',
-    this.customerPhone = '+92 300 1234567',
-    this.address = 'House 45, Sector B, Blue Area',
-    this.eta = '8 mins',
-    this.distance = '1.2 km',
-    this.paymentAmount = 'Rs. 1,450',
-    this.items = '3 Packs •\nGroceries',
+    this.orderId = '',
+    this.customerName = 'Customer',
+    this.customerPhone = '',
+    this.address = 'Customer location',
+    this.eta = 'Calculating',
+    this.distance = '--',
+    this.paymentAmount = 'Rs. 0',
+    this.items = '',
     this.hasDeliveryPhoto = false,
     this.isDelivered = false,
     this.notificationSent = false,

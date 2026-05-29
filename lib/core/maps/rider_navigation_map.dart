@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -52,7 +54,8 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
         oldWidget.stage != widget.stage) {
       _routeRevealController.forward(from: 0);
     }
-    if (oldWidget.snapshot.riderPosition != widget.snapshot.riderPosition) {
+    if (widget.snapshot.hasLiveLocation &&
+        oldWidget.snapshot.riderPosition != widget.snapshot.riderPosition) {
       _animateTo(widget.snapshot.riderPosition, _lastZoom);
     }
   }
@@ -69,7 +72,7 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
   Widget build(BuildContext context) {
     final route = _route;
     final initialFit = CameraFit.coordinates(
-      coordinates: route,
+      coordinates: _fitCoordinates,
       padding: EdgeInsets.fromLTRB(
         widget.compact ? 44 : 54,
         widget.compact ? 48 : 88,
@@ -91,7 +94,9 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
               backgroundColor: const Color(0xFFE8EEF2),
               onMapReady: () {
                 _mapReady = true;
-                _lastCenter = _mapController.camera.center;
+                _lastCenter = widget.snapshot.hasLiveLocation
+                    ? widget.snapshot.riderPosition
+                    : _destination;
                 _lastZoom = _mapController.camera.zoom;
               },
               onPositionChanged: (camera, hasGesture) {
@@ -110,7 +115,7 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.vyraal.rider',
+                userAgentPackageName: 'com.koadly.vyraal.rider',
                 retinaMode: RetinaMode.isHighDensity(context),
                 tileBuilder: (context, tileWidget, tile) {
                   return DecoratedBox(
@@ -147,6 +152,9 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
                 animation: _routeRevealController,
                 builder: (context, _) {
                   final visibleRoute = _visibleRoute(route);
+                  if (visibleRoute.length < 2) {
+                    return const SizedBox.shrink();
+                  }
                   return PolylineLayer(
                     polylines: [
                       Polyline(
@@ -181,12 +189,17 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
           Positioned(
             left: 12,
             top: 12,
-            child: _MapLegend(
-              stage: widget.stage,
-              eta: widget.snapshot.etaLabel,
-              distance: widget.snapshot.distanceLabel,
-              compact: widget.compact,
-            ),
+            child: widget.snapshot.hasLiveLocation
+                ? _MapLegend(
+                    stage: widget.stage,
+                    eta: widget.snapshot.etaLabel,
+                    distance: widget.snapshot.distanceLabel,
+                    compact: widget.compact,
+                  )
+                : _LiveGpsBanner(
+                    message: widget.snapshot.locationStatus,
+                    compact: widget.compact,
+                  ),
           ),
           Positioned(
             right: 12,
@@ -194,7 +207,9 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
             child: _MapControls(
               compact: widget.compact,
               onFitRoute: _fitRoute,
-              onRider: () => _animateTo(widget.snapshot.riderPosition, 16),
+              onRider: widget.snapshot.hasLiveLocation
+                  ? () => _animateTo(widget.snapshot.riderPosition, 16)
+                  : () => _animateTo(_destination, 16),
               onDestination: () => _animateTo(_destination, 16),
               onZoomIn: () => _animateTo(_lastCenter, (_lastZoom + 0.7)),
               onZoomOut: () => _animateTo(_lastCenter, (_lastZoom - 0.7)),
@@ -205,11 +220,17 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
               left: 16,
               right: 16,
               bottom: 18,
-              child: _RouteSummaryCard(
-                stage: widget.stage,
-                eta: widget.snapshot.etaLabel,
-                distance: widget.snapshot.distanceLabel,
-              ),
+              child: widget.snapshot.hasLiveLocation
+                  ? _RouteSummaryCard(
+                      stage: widget.stage,
+                      eta: widget.snapshot.etaLabel,
+                      distance: widget.snapshot.distanceLabel,
+                    )
+                  : _RouteSummaryCard(
+                      stage: widget.stage,
+                      eta: 'Waiting for GPS',
+                      distance: 'Live tracking off',
+                    ),
             ),
         ],
       ),
@@ -220,40 +241,52 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
     final destinationMarker = widget.stage == RiderRouteStage.pickup
         ? Marker(
             point: widget.snapshot.sellerPosition,
-            width: widget.compact ? 48 : 56,
-            height: widget.compact ? 48 : 56,
-            child: const _PinMarker(
-              color: Color(0xFF10B981),
-              icon: Icons.storefront_rounded,
-              label: 'Seller',
+            width: widget.compact ? 68 : 82,
+            height: widget.compact ? 68 : 82,
+            child: _SellerMarker(
+              name: widget.snapshot.sellerName,
+              imageUrl: widget.snapshot.sellerImageUrl,
+              imageBase64: widget.snapshot.sellerImageBase64,
+              compact: widget.compact,
             ),
           )
         : Marker(
             point: widget.snapshot.customerPosition,
-            width: widget.compact ? 48 : 56,
-            height: widget.compact ? 48 : 56,
-            child: const _PinMarker(
-              color: Color(0xFFE11D48),
+            width: widget.compact ? 52 : 62,
+            height: widget.compact ? 52 : 62,
+            child: _PinMarker(
+              color: const Color(0xFFE11D48),
               icon: Icons.home_outlined,
-              label: 'Customer',
+              label: widget.snapshot.customerName,
             ),
           );
 
     return [
-      Marker(
-        point: widget.snapshot.riderPosition,
-        width: widget.compact ? 64 : 76,
-        height: widget.compact ? 64 : 76,
-        child: _RiderMarker(heading: widget.snapshot.heading),
-      ),
+      if (widget.snapshot.hasLiveLocation)
+        Marker(
+          point: widget.snapshot.riderPosition,
+          width: widget.compact ? 64 : 76,
+          height: widget.compact ? 64 : 76,
+          child: _RiderMarker(heading: widget.snapshot.heading),
+        ),
       destinationMarker,
     ];
   }
 
   List<LatLng> get _route {
+    if (!widget.snapshot.hasLiveLocation) return [_destination];
     return widget.snapshot.routePoints.isEmpty
         ? [widget.snapshot.riderPosition, _destination]
         : widget.snapshot.routePoints;
+  }
+
+  List<LatLng> get _fitCoordinates {
+    if (widget.snapshot.hasLiveLocation) return _route;
+    return [
+      widget.snapshot.sellerPosition,
+      widget.snapshot.customerPosition,
+      _destination,
+    ];
   }
 
   LatLng get _destination {
@@ -274,7 +307,7 @@ class _RiderNavigationMapState extends State<RiderNavigationMap>
     if (!_mapReady) return;
     _mapController.fitCamera(
       CameraFit.coordinates(
-        coordinates: _route,
+        coordinates: _fitCoordinates,
         padding: const EdgeInsets.fromLTRB(54, 82, 54, 170),
       ),
     );
@@ -387,6 +420,116 @@ class _RiderMarker extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SellerMarker extends StatelessWidget {
+  const _SellerMarker({
+    required this.name,
+    required this.compact,
+    this.imageUrl,
+    this.imageBase64,
+  });
+
+  final String name;
+  final bool compact;
+  final String? imageUrl;
+  final String? imageBase64;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = compact ? 46.0 : 54.0;
+    return Tooltip(
+      message: name,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.82, end: 1),
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutBack,
+            builder: (context, scale, child) {
+              return Transform.scale(scale: scale, child: child);
+            },
+            child: Container(
+              width: size,
+              height: size,
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFFC914), width: 3),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.20),
+                    blurRadius: 14,
+                    offset: const Offset(0, 7),
+                  ),
+                ],
+              ),
+              child: ClipOval(child: _sellerImage()),
+            ),
+          ),
+          if (!compact)
+            Container(
+              constraints: const BoxConstraints(maxWidth: 78),
+              margin: const EdgeInsets.only(top: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.96),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFC914)),
+              ),
+              child: Text(
+                name.isEmpty ? 'Shop' : name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF111827),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sellerImage() {
+    final base64 = imageBase64?.trim();
+    if (base64 != null && base64.isNotEmpty) {
+      try {
+        return Image.memory(
+          base64Decode(base64),
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallback(),
+        );
+      } catch (_) {
+        return _fallback();
+      }
+    }
+
+    final url = imageUrl?.trim();
+    if (url != null && url.isNotEmpty && url.startsWith('http')) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallback(),
+      );
+    }
+    return _fallback();
+  }
+
+  Widget _fallback() {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        color: Color(0xFF10B981),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(Icons.storefront_rounded, color: Colors.white, size: 24),
     );
   }
 }
@@ -554,6 +697,55 @@ class _MapDivider extends StatelessWidget {
       width: compact ? 22 : 28,
       height: 1,
       color: const Color(0xFFD3C7AC),
+    );
+  }
+}
+
+class _LiveGpsBanner extends StatelessWidget {
+  const _LiveGpsBanner({required this.message, required this.compact});
+
+  final String message;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF111827).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFC914)),
+      ),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 10 : 12,
+          vertical: compact ? 8 : 10,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.gps_not_fixed_rounded,
+              color: Color(0xFFFFC914),
+              size: 17,
+            ),
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: compact ? 170 : 230),
+              child: Text(
+                message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: compact ? 11 : 12,
+                  height: 1.25,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

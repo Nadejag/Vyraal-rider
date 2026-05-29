@@ -42,6 +42,35 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:303101265658:android:4f2462a0949ee45f59eb43",
+        "android_client_info": {
+          "package_name": "com.koadly.vyraal.rider"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "303101265658-0nsko3at5g2irfsac960s5jr6q1e5rbc.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDGQz9nxI0cg7inDivRtqaP-z5w8ekl2pI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "303101265658-0nsko3at5g2irfsac960s5jr6q1e5rbc.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"

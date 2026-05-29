@@ -14,6 +14,7 @@ class HomeModel {
     required this.detailedTrips,
     required this.profile,
     this.selectedTabIndex = 0,
+    this.ordersError,
   });
 
   final int todayTrips;
@@ -30,6 +31,27 @@ class HomeModel {
   final List<DetailedTripModel> detailedTrips;
   final RiderProfileModel profile;
   final int selectedTabIndex;
+  final String? ordersError;
+
+  static HomeModel empty({RiderProfileModel? profile}) {
+    final now = DateTime.now();
+    final start = now.subtract(const Duration(days: 6));
+    return HomeModel(
+      todayTrips: 0,
+      todayEarnings: 'Rs. 0',
+      orders: const [],
+      weeklyTotal: 'Rs. 0',
+      weeklyGrowth: '0%',
+      weekRange: '${_shortDate(start)} - ${_shortDate(now)}',
+      weeklyEarnings: _emptyWeek(now),
+      tripHistory: const [],
+      payoutStatus: PayoutStatus.pending,
+      totalTrips: 0,
+      hoursOnline: 0,
+      detailedTrips: const [],
+      profile: profile ?? RiderProfileModel.empty(),
+    );
+  }
 
   HomeModel copyWith({
     int? todayTrips,
@@ -46,6 +68,8 @@ class HomeModel {
     List<DetailedTripModel>? detailedTrips,
     RiderProfileModel? profile,
     int? selectedTabIndex,
+    String? ordersError,
+    bool clearOrdersError = false,
   }) {
     return HomeModel(
       todayTrips: todayTrips ?? this.todayTrips,
@@ -62,8 +86,46 @@ class HomeModel {
       detailedTrips: detailedTrips ?? this.detailedTrips,
       profile: profile ?? this.profile,
       selectedTabIndex: selectedTabIndex ?? this.selectedTabIndex,
+      ordersError: clearOrdersError ? null : ordersError ?? this.ordersError,
     );
   }
+
+  static List<WeeklyEarningModel> _emptyWeek(DateTime now) {
+    return List<WeeklyEarningModel>.generate(7, (index) {
+      final day = now.subtract(Duration(days: 6 - index));
+      return WeeklyEarningModel(
+        day: _dayLabel(day),
+        amount: 0,
+        isToday: _isSameDay(day, now),
+      );
+    });
+  }
+
+  static String _dayLabel(DateTime date) {
+    const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return labels[date.weekday - 1];
+  }
+
+  static String _shortDate(DateTime date) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${date.day} ${months[date.month - 1]}';
+  }
+
+  static bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 class WeeklyEarningModel {
@@ -88,9 +150,29 @@ class RiderOrderModel {
     required this.itemCount,
     required this.customerArea,
     required this.shopImageAsset,
+    this.orderKey,
+    this.sellerId,
+    this.customerId,
+    this.customerName,
+    this.customerPhone,
+    this.sellerPhone,
+    this.sellerAddress,
+    this.deliveryAddress,
+    this.paymentAmount,
+    this.sellerLat,
+    this.sellerLng,
+    this.deliveryLat,
+    this.deliveryLng,
+    this.shopImageUrl,
+    this.shopImageBase64,
     this.remainingSeconds = 60,
     this.isLocked = false,
     this.isHighlighted = false,
+    this.createdAt,
+    this.updatedAt,
+    this.status,
+    this.requestStatus,
+    this.deliveryStage,
   });
 
   final String id;
@@ -101,11 +183,40 @@ class RiderOrderModel {
   final int itemCount;
   final String customerArea;
   final String shopImageAsset;
+  final String? orderKey;
+  final String? sellerId;
+  final String? customerId;
+  final String? customerName;
+  final String? customerPhone;
+  final String? sellerPhone;
+  final String? sellerAddress;
+  final String? deliveryAddress;
+  final String? paymentAmount;
+  final double? sellerLat;
+  final double? sellerLng;
+  final double? deliveryLat;
+  final double? deliveryLng;
+  final String? shopImageUrl;
+  final String? shopImageBase64;
   final int remainingSeconds;
   final bool isLocked;
   final bool isHighlighted;
+  final int? createdAt;
+  final int? updatedAt;
+  final String? status;
+  final String? requestStatus;
+  final String? deliveryStage;
 
   String get distanceLabel => '${distanceKm.toStringAsFixed(1)} km away';
+  String get displayCustomer => customerName?.trim().isNotEmpty == true
+      ? customerName!.trim()
+      : 'Customer';
+  String get displaySellerPhone => sellerPhone?.trim().isNotEmpty == true
+      ? sellerPhone!.trim()
+      : 'No seller phone';
+  String get displayCustomerPhone => customerPhone?.trim().isNotEmpty == true
+      ? customerPhone!.trim()
+      : 'No customer phone';
 
   RiderOrderModel copyWith({
     String? id,
@@ -116,9 +227,29 @@ class RiderOrderModel {
     int? itemCount,
     String? customerArea,
     String? shopImageAsset,
+    String? orderKey,
+    String? sellerId,
+    String? customerId,
+    String? customerName,
+    String? customerPhone,
+    String? sellerPhone,
+    String? sellerAddress,
+    String? deliveryAddress,
+    String? paymentAmount,
+    double? sellerLat,
+    double? sellerLng,
+    double? deliveryLat,
+    double? deliveryLng,
+    String? shopImageUrl,
+    String? shopImageBase64,
     int? remainingSeconds,
     bool? isLocked,
     bool? isHighlighted,
+    int? createdAt,
+    int? updatedAt,
+    String? status,
+    String? requestStatus,
+    String? deliveryStage,
   }) {
     return RiderOrderModel(
       id: id ?? this.id,
@@ -129,9 +260,29 @@ class RiderOrderModel {
       itemCount: itemCount ?? this.itemCount,
       customerArea: customerArea ?? this.customerArea,
       shopImageAsset: shopImageAsset ?? this.shopImageAsset,
+      orderKey: orderKey ?? this.orderKey,
+      sellerId: sellerId ?? this.sellerId,
+      customerId: customerId ?? this.customerId,
+      customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
+      sellerPhone: sellerPhone ?? this.sellerPhone,
+      sellerAddress: sellerAddress ?? this.sellerAddress,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
+      paymentAmount: paymentAmount ?? this.paymentAmount,
+      sellerLat: sellerLat ?? this.sellerLat,
+      sellerLng: sellerLng ?? this.sellerLng,
+      deliveryLat: deliveryLat ?? this.deliveryLat,
+      deliveryLng: deliveryLng ?? this.deliveryLng,
+      shopImageUrl: shopImageUrl ?? this.shopImageUrl,
+      shopImageBase64: shopImageBase64 ?? this.shopImageBase64,
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
       isLocked: isLocked ?? this.isLocked,
       isHighlighted: isHighlighted ?? this.isHighlighted,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      status: status ?? this.status,
+      requestStatus: requestStatus ?? this.requestStatus,
+      deliveryStage: deliveryStage ?? this.deliveryStage,
     );
   }
 }
@@ -156,7 +307,7 @@ class TripHistoryModel {
 
 enum PaymentType { cash, online }
 
-enum PayoutStatus { pending, approved, paid }
+enum PayoutStatus { pending, approved, paid, rejected }
 
 class RiderNotificationModel {
   const RiderNotificationModel({
@@ -240,12 +391,15 @@ class RiderProfileModel {
     required this.bikeRegistrationNumber,
     required this.vehicleName,
     required this.memberSince,
-    this.isOnline = true,
-    this.hasProfilePhoto = true,
+    this.isOnline = false,
+    this.isBusy = false,
+    this.hasProfilePhoto = false,
     this.language = 'English',
     this.alertsEnabled = true,
-    this.cnicStatus = DocumentReviewStatus.approved,
-    this.bikeDocsStatus = DocumentReviewStatus.approved,
+    this.cnicStatus = DocumentReviewStatus.missing,
+    this.bikeDocsStatus = DocumentReviewStatus.missing,
+    this.profilePhotoUrl,
+    this.verificationStatus = 'incomplete',
   });
 
   final String fullName;
@@ -255,15 +409,37 @@ class RiderProfileModel {
   final String vehicleName;
   final String memberSince;
   final bool isOnline;
+  final bool isBusy;
   final bool hasProfilePhoto;
   final String language;
   final bool alertsEnabled;
   final DocumentReviewStatus cnicStatus;
   final DocumentReviewStatus bikeDocsStatus;
+  final String? profilePhotoUrl;
+  final String verificationStatus;
+
+  static RiderProfileModel empty() => const RiderProfileModel(
+    fullName: 'Rider',
+    phoneNumber: '',
+    cnic: '',
+    bikeRegistrationNumber: '',
+    vehicleName: '',
+    memberSince: '',
+    isOnline: false,
+    isBusy: false,
+    hasProfilePhoto: false,
+    cnicStatus: DocumentReviewStatus.missing,
+    bikeDocsStatus: DocumentReviewStatus.missing,
+  );
 
   bool get isApproved =>
       cnicStatus == DocumentReviewStatus.approved &&
       bikeDocsStatus == DocumentReviewStatus.approved;
+
+  String get workStatusLabel {
+    if (isBusy) return 'Busy';
+    return isOnline ? 'Online' : 'Offline';
+  }
 
   RiderProfileModel copyWith({
     String? fullName,
@@ -273,11 +449,14 @@ class RiderProfileModel {
     String? vehicleName,
     String? memberSince,
     bool? isOnline,
+    bool? isBusy,
     bool? hasProfilePhoto,
     String? language,
     bool? alertsEnabled,
     DocumentReviewStatus? cnicStatus,
     DocumentReviewStatus? bikeDocsStatus,
+    String? profilePhotoUrl,
+    String? verificationStatus,
   }) {
     return RiderProfileModel(
       fullName: fullName ?? this.fullName,
@@ -288,13 +467,114 @@ class RiderProfileModel {
       vehicleName: vehicleName ?? this.vehicleName,
       memberSince: memberSince ?? this.memberSince,
       isOnline: isOnline ?? this.isOnline,
+      isBusy: isBusy ?? this.isBusy,
       hasProfilePhoto: hasProfilePhoto ?? this.hasProfilePhoto,
       language: language ?? this.language,
       alertsEnabled: alertsEnabled ?? this.alertsEnabled,
       cnicStatus: cnicStatus ?? this.cnicStatus,
       bikeDocsStatus: bikeDocsStatus ?? this.bikeDocsStatus,
+      profilePhotoUrl: profilePhotoUrl ?? this.profilePhotoUrl,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
     );
+  }
+
+  factory RiderProfileModel.fromJson(Map<String, dynamic> json) {
+    final cnicStatus = _docStatus(
+      json['cnicStatus'] ?? json['cnicVerificationStatus'] ?? json['cnicReviewStatus'],
+    );
+    final bikeStatus = _docStatus(
+      json['bikeDocsStatus'] ??
+          json['vehicleDocsStatus'] ??
+          json['bikeVerificationStatus'] ??
+          json['licenseStatus'],
+    );
+    final photo = _string(json['profilePhotoUrl'] ?? json['avatarUrl'] ?? json['photoUrl']);
+    return RiderProfileModel(
+      fullName: _string(json['fullName'] ?? json['name'] ?? json['riderName'], fallback: 'Rider'),
+      phoneNumber: _string(json['phoneNumber'] ?? json['phone']),
+      cnic: _string(json['cnic']),
+      bikeRegistrationNumber: _string(
+        json['bikeRegistrationNumber'] ?? json['bikeNumber'] ?? json['vehicleNumber'],
+      ),
+      vehicleName: _string(json['vehicleName'] ?? json['bikeName'] ?? json['vehicleType']),
+      memberSince: _memberSince(json['createdAt'] ?? json['joinedAt']),
+      isOnline: _bool(json['isOnline'] ?? json['online']),
+      isBusy: _bool(json['isBusy'] ?? json['busy']),
+      hasProfilePhoto: photo.isNotEmpty,
+      language: _string(json['language'], fallback: 'English'),
+      alertsEnabled: json['alertsEnabled'] is bool ? json['alertsEnabled'] as bool : true,
+      cnicStatus: cnicStatus,
+      bikeDocsStatus: bikeStatus,
+      profilePhotoUrl: photo.isEmpty ? null : photo,
+      verificationStatus: _string(json['verificationStatus'], fallback: _verificationLabel(cnicStatus, bikeStatus)),
+    );
+  }
+
+  static String _string(Object? value, {String fallback = ''}) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? fallback : text;
+  }
+
+  static bool _bool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    final text = value?.toString().toLowerCase().trim() ?? '';
+    return text == 'true' || text == 'online' || text == '1';
+  }
+
+  static DocumentReviewStatus _docStatus(Object? value) {
+    final text = value?.toString().toLowerCase().trim() ?? '';
+    if (text == 'approved' || text == 'verified') return DocumentReviewStatus.approved;
+    if (text == 'pending' || text == 'submitted' || text == 'under_review') {
+      return DocumentReviewStatus.pending;
+    }
+    if (text == 'rejected' || text == 'declined') return DocumentReviewStatus.rejected;
+    return DocumentReviewStatus.missing;
+  }
+
+  static String _verificationLabel(
+    DocumentReviewStatus cnic,
+    DocumentReviewStatus bike,
+  ) {
+    if (cnic == DocumentReviewStatus.approved && bike == DocumentReviewStatus.approved) {
+      return 'approved';
+    }
+    if (cnic == DocumentReviewStatus.rejected || bike == DocumentReviewStatus.rejected) {
+      return 'rejected';
+    }
+    if (cnic == DocumentReviewStatus.pending || bike == DocumentReviewStatus.pending) {
+      return 'pending';
+    }
+    return 'incomplete';
+  }
+
+  static String _memberSince(Object? value) {
+    final millis = _toMillis(value);
+    if (millis == null) return '';
+    final date = DateTime.fromMillisecondsSinceEpoch(millis);
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[date.month - 1]} ${date.year}';
+  }
+
+  static int? _toMillis(Object? value) {
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
   }
 }
 
-enum DocumentReviewStatus { missing, pending, approved }
+enum DocumentReviewStatus { missing, pending, approved, rejected }

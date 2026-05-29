@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../config/routes/app_routes.dart';
 import '../../../core/maps/rider_map_models.dart';
 import '../../../core/maps/rider_navigation_map.dart';
+import '../../../core/realtime/rider_order_chat_sheet.dart';
 import '../../../shared/widgets/ui_polish.dart';
 import '../view_models/navigation_view_model.dart';
 
@@ -72,6 +75,13 @@ class DeliveryNavigationView extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+Future<void> _callPhone(String phone) async {
+  final uri = Uri.parse('tel:$phone');
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri);
   }
 }
 
@@ -368,9 +378,12 @@ class _DeliverySheet extends StatelessWidget {
             SizedBox(
               height: 50,
               child: FilledButton.icon(
-                onPressed: viewModel.model.isDelivered
+                onPressed:
+                    viewModel.model.isDelivered ||
+                        !viewModel.hasActiveOrder ||
+                        viewModel.isBusy
                     ? null
-                    : viewModel.markDelivered,
+                    : () => viewModel.markDelivered(),
                 style: FilledButton.styleFrom(
                   disabledBackgroundColor: const Color(0xFFE5F8F0),
                   disabledForegroundColor: const Color(0xFF00A86B),
@@ -386,20 +399,54 @@ class _DeliverySheet extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                icon: const Icon(Icons.check_circle_outline_rounded, size: 22),
+                icon: viewModel.isBusy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check_circle_outline_rounded, size: 22),
                 label: Text(
-                  viewModel.model.isDelivered ? 'DELIVERED' : 'DELIVERED',
+                  viewModel.model.isDelivered
+                      ? 'DELIVERED'
+                      : viewModel.hasActiveOrder
+                      ? 'DELIVERED'
+                      : 'NO ACTIVE DELIVERY',
                 ),
               ),
             ),
+            if (viewModel.model.isDelivered) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pushNamedAndRemoveUntil(AppRoutes.home, (_) => false),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: DeliveryNavigationView._goldColor,
+                    foregroundColor: DeliveryNavigationView._darkGoldColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  icon: const Icon(Icons.home_rounded),
+                  label: const Text('BACK TO HOME'),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
                 Expanded(
                   child: _DeliveryOutlineButton(
                     icon: Icons.report_problem_outlined,
-                    label: 'Issue',
-                    onPressed: () {},
+                    label: 'Call',
+                    onPressed: () => _callPhone(viewModel.model.customerPhone),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -407,7 +454,11 @@ class _DeliverySheet extends StatelessWidget {
                   child: _DeliveryOutlineButton(
                     icon: Icons.chat_outlined,
                     label: 'Chat',
-                    onPressed: () {},
+                    onPressed: () => RiderOrderChatSheet.show(
+                      context,
+                      orderId: viewModel.model.orderId,
+                      title: viewModel.model.customerName,
+                    ),
                   ),
                 ),
               ],

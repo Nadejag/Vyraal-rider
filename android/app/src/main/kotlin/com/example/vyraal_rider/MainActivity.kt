@@ -1,4 +1,4 @@
-package com.example.vyraal_rider
+package com.koadly.vyraal.rider
 
 import io.flutter.embedding.android.FlutterActivity
 
